@@ -62,9 +62,9 @@ openyoutubeclaw = "openbiliclaw.cli:app"
 openbiliclaw = "openbiliclaw.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/whiteguo233/OpenBiliClaw"
-Repository = "https://github.com/whiteguo233/OpenBiliClaw"
-Issues = "https://github.com/whiteguo233/OpenBiliClaw/issues"
+Homepage = "https://github.com/stein114514/OpenYouTubeClaw"
+Repository = "https://github.com/stein114514/OpenYouTubeClaw"
+Issues = "https://github.com/stein114514/OpenYouTubeClaw/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openbiliclaw"]
