@@ -353,7 +353,6 @@ class TestBackendAPI:
         import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
         import openbiliclaw.discovery.engine as discovery_engine_module
-        import openbiliclaw.discovery.strategies.strategies as strategies_module
         import openbiliclaw.llm.service as llm_service_module
         import openbiliclaw.memory.manager as memory_module
         import openbiliclaw.recommendation.engine as recommendation_module
@@ -519,10 +518,17 @@ class TestBackendAPI:
             "ContentDiscoveryEngine",
             FakeContentDiscoveryEngine,
         )
-        monkeypatch.setattr(strategies_module, "SearchStrategy", _FakeStrategy)
-        monkeypatch.setattr(strategies_module, "TrendingStrategy", _FakeStrategy)
-        monkeypatch.setattr(strategies_module, "RelatedChainStrategy", _FakeStrategy)
-        monkeypatch.setattr(strategies_module, "ExploreStrategy", _FakeStrategy)
+        import openbiliclaw.api.runtime_context as runtime_context_module
+
+        monkeypatch.setattr(
+            runtime_context_module,
+            "build_youtube_discovery_strategies",
+            lambda *, config, client, llm_service, memory, concurrency: [
+                _FakeStrategy(concurrency=concurrency),
+                _FakeStrategy(concurrency=concurrency),
+                _FakeStrategy(concurrency=concurrency),
+            ],
+        )
         monkeypatch.setattr(database_module, "Database", FakeDatabase)
         monkeypatch.setattr(memory_module, "MemoryManager", FakeMemoryManager)
         monkeypatch.setattr(llm_service_module, "LLMService", FakeLLMService)
@@ -3880,6 +3886,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert cfg.logging.unmanaged_truncate_mb == 78
         assert cfg.logging.unmanaged_max_age_days == 9
 
+    @pytest.mark.skip(reason="multi-platform share suggestion removed in YouTube-only fork")
     def test_source_share_suggestion_uses_event_counts(self, monkeypatch, tmp_path) -> None:
         """GET /api/config/source-share-suggestion should suggest ratios
         from observed platform event counts and current enabled switches."""
@@ -3941,6 +3948,7 @@ class TestEmbeddingAndCompatProviderE2E:
             },
         }
 
+    @pytest.mark.skip(reason="multi-platform share suggestion removed in YouTube-only fork")
     def test_source_share_suggestion_post_uses_form_overrides(self, monkeypatch, tmp_path) -> None:
         """POST /api/config/source-share-suggestion should support the
         extension settings page's unsaved switch/share state."""

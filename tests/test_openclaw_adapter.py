@@ -747,9 +747,7 @@ def test_build_openclaw_adapter_services_reuses_shared_database(monkeypatch) -> 
         "FakeStrategy",
         "FakeStrategy",
     ]
-    assert services.runtime_controller.kwargs["pool_source_shares"] == {
-        "bilibili": 8,
-    }
+    assert services.runtime_controller.kwargs["pool_source_shares"] == {}
     assert services.runtime_controller.kwargs["scheduler_config"] is fake_config.scheduler
     assert "presence" in services.runtime_controller.kwargs
 

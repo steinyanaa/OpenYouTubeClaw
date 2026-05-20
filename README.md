@@ -73,6 +73,8 @@ youtube = 1
 
 ## 3. 初始化 YouTube 画像
 
+> **Docker / Agent 安装**：后端容器启动后会自动运行 init，无需手动执行此步骤。
+
 三种方式任选一种。
 
 ### A. Google Takeout（推荐）
