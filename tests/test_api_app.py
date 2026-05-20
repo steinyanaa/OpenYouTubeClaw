@@ -550,7 +550,9 @@ class TestBackendAPI:
         assert (
             captured["runtime_controller_kwargs"]["presence"] is app.state.runtime_context.presence
         )
-        assert callable(captured["account_sync_kwargs"]["llm_work_allowed"])
+        # AccountSyncService is disabled in the YouTube-only fork (account sync
+        # is replaced by explicit fetch-youtube / import-youtube commands).
+        assert app.state.runtime_context.account_sync_service is None
 
     def test_cap_by_franchise_keeps_at_most_n_per_franchise(self) -> None:
         """Regression for the 'one popup full of 原神' bug. The API
