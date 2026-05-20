@@ -935,6 +935,7 @@ def run_init_streaming(
     if env:
         merged_env.update(env)
     merged_env.setdefault("PYTHONUNBUFFERED", "1")
+    merged_env.setdefault("PYTHONIOENCODING", "utf-8")
     start = time.monotonic()
     proc = subprocess.Popen(  # noqa: S603 — command is built by this bootstrap script.
         cmd,
@@ -943,6 +944,8 @@ def run_init_streaming(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         bufsize=1,
     )
     assert proc.stdout is not None

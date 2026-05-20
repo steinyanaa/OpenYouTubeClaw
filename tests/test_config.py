@@ -88,6 +88,11 @@ class TestConfigDefaults:
 
         assert config.scheduler.pool_target_count == 600
 
+    def test_product_mode_defaults_to_youtube_only(self) -> None:
+        config = Config()
+
+        assert config.product_mode == "youtube_only"
+
     def test_scheduler_pool_source_shares_defaults(self) -> None:
         config = Config()
 
@@ -629,14 +634,95 @@ youtube = 3
 
     config = load_config(toml_path)
 
-    # Legacy non-YouTube shares still parse for compatibility; runtime
-    # source policy filters them out.
-    assert config.scheduler.pool_source_shares == {
-        "bilibili": 7,
-        "xiaohongshu": 2,
-        "douyin": 1,
-        "youtube": 3,
-    }
+    # YouTube-only product mode filters legacy source shares at config load.
+    assert config.scheduler.pool_source_shares == {"youtube": 3}
+
+
+def test_youtube_only_overrides_legacy_sources_enabled_true() -> None:
+    config = _build_config(
+        {
+            "sources": {
+                "bilibili": {"enabled": True},
+                "xiaohongshu": {
+                    "enabled": True,
+                    "daily_search_budget": 30,
+                    "daily_creator_budget": 5,
+                },
+                "douyin": {
+                    "enabled": True,
+                    "daily_search_budget": 12,
+                    "daily_hot_budget": 3,
+                    "daily_feed_budget": 7,
+                },
+                "youtube": {"enabled": True},
+            }
+        }
+    )
+
+    assert config.product_mode == "youtube_only"
+    assert config.sources.youtube.enabled is True
+    assert config.sources.bilibili.enabled is False
+    assert config.sources.xiaohongshu.enabled is False
+    assert config.sources.douyin.enabled is False
+
+
+def test_youtube_only_keeps_legacy_quotas_but_not_enabled() -> None:
+    config = _build_config(
+        {
+            "sources": {
+                "xiaohongshu": {"enabled": True, "daily_search_budget": 30},
+                "douyin": {"enabled": True, "daily_search_budget": 12},
+            },
+            "scheduler": {
+                "pool_source_shares": {
+                    "bilibili": 7,
+                    "xiaohongshu": 2,
+                    "douyin": 1,
+                    "youtube": 3,
+                }
+            },
+        }
+    )
+
+    assert config.sources.xiaohongshu.daily_search_budget == 30
+    assert config.sources.douyin.daily_search_budget == 12
+    assert config.sources.xiaohongshu.enabled is False
+    assert config.sources.douyin.enabled is False
+    assert config.scheduler.pool_source_shares == {"youtube": 3}
+
+
+def test_load_config_applies_youtube_only_product_mode(tmp_path: Path) -> None:
+    toml_path = tmp_path / "config.toml"
+    toml_path.write_text(
+        """
+[general]
+product_mode = "youtube_only"
+
+[sources.bilibili]
+enabled = true
+
+[sources.xiaohongshu]
+enabled = true
+daily_search_budget = 30
+
+[sources.douyin]
+enabled = true
+daily_search_budget = 12
+
+[scheduler.pool_source_shares]
+bilibili = 7
+youtube = 3
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_config(toml_path)
+
+    assert config.product_mode == "youtube_only"
+    assert config.sources.bilibili.enabled is False
+    assert config.sources.xiaohongshu.enabled is False
+    assert config.sources.douyin.enabled is False
+    assert config.scheduler.pool_source_shares == {"youtube": 3}
 
 
 def test_load_config_accepts_utf8_bom(tmp_path: Path) -> None:
@@ -744,7 +830,9 @@ request_interval_seconds = 4
 
     config = load_config(toml_path)
 
-    assert config.sources.douyin.enabled is True
+    # YouTube-only product mode force-disables the legacy source switch,
+    # while preserving the legacy fields for config compatibility.
+    assert config.sources.douyin.enabled is False
     assert config.sources.douyin.mode == "direct"
     assert config.sources.douyin.cookie_env == "CUSTOM_DY_COOKIE"
     assert config.sources.douyin.daily_search_budget == 12

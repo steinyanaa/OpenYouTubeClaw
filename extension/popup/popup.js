@@ -25,6 +25,7 @@ import {
   shouldSubmitChatOnEnter,
   validateCommentInput,
 } from "./popup-helpers.js";
+import { buildHydratedInboxMessages } from "./popup-inbox.js";
 import { createRuntimeStreamClient } from "./popup-stream.js";
 import {
   getBackendEndpointConfig,
@@ -3438,40 +3439,9 @@ async function loadProfileSummary({ force = false } = {}) {
 function hydrateInboxFromSpeculations(speculations) {
   if (!Array.isArray(speculations)) return;
   // Speculator regenerates probes on a runtime cycle; older actives may
-  // have rotated to cooldown.  We must REPLACE the interest.probe slice
-  // of state.messages with the current active set, otherwise the inbox
-  // accumulates stale entries from past cycles and drifts away from
-  // what the profile section shows.
-  // Delight messages are preserved untouched — they live on a separate
-  // lifecycle (delight/pending endpoint).
-  const activeDomains = new Set(
-    speculations
-      .filter((s) => s && s.domain && (!s.status || s.status === "active"))
-      .map((s) => s.domain),
-  );
-  // Drop interest.probe entries no longer in the active set.
-  state.messages = state.messages.filter((m) => {
-    const type = m?.type || "interest.probe";
-    if (type !== "interest.probe") return true;
-    return m.domain && activeDomains.has(m.domain);
-  });
-  // Add any current active probes not yet in state.messages.
-  const existingDomains = new Set(
-    state.messages
-      .filter((m) => (m?.type || "interest.probe") === "interest.probe" && m?.domain)
-      .map((m) => m.domain),
-  );
-  for (const item of speculations) {
-    if (!item || (item.status && item.status !== "active") || !item.domain) continue;
-    if (existingDomains.has(item.domain)) continue;
-    state.messages.push({
-      type: "interest.probe",
-      domain: item.domain,
-      reason: item.reason || "",
-      specifics: Array.isArray(item.specifics) ? item.specifics : [],
-    });
-    existingDomains.add(item.domain);
-  }
+  // have rotated to cooldown. Replace only the interest.probe slice so
+  // delight messages keep their separate lifecycle.
+  state.messages = buildHydratedInboxMessages(state.messages, speculations);
   updateMessageBadge();
 }
 

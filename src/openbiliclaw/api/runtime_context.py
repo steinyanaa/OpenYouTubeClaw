@@ -40,6 +40,23 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_SWAPPABLE_RUNTIME_FIELDS = (
+    "config",
+    "degraded",
+    "degraded_reason",
+    "degraded_issues",
+    "llm_registry",
+    "llm_service",
+    "bilibili_client",
+    "soul_engine",
+    "dialogue",
+    "discovery_engine",
+    "recommendation_engine",
+    "runtime_controller",
+    "account_sync_service",
+    "auto_update_service",
+)
+
 
 def _pool_source_shares_from_config(config: Any) -> dict[str, int]:
     return effective_pool_source_shares(config)
@@ -124,30 +141,43 @@ class RuntimeContext:
         return _gate(scheduler, self.presence)
 
     async def rebuild_from_config(self, new_config: Config) -> None:
-        """Rebuild all swappable components from *new_config*.
+        """Transactionally rebuild swappable components from *new_config*.
 
-        v0.3.63+: this is now ``async`` so the call can ``await`` the
-        background-task registry's ``cancel_all`` BEFORE constructing
-        new runtime objects. Without that step, detached tasks created
-        by the OLD recommendation engine / refresh controller (per-event
-        triggers, per-strategy precompute, prewarm helpers) keep running
-        after rebuild and compete with the new runtime for SQLite writes
-        and LLM tokens for several seconds.
-
-        Construction itself is still synchronous and performed entirely
-        into local variables first — only after **every** component
-        succeeds are the attributes assigned, so atomic rollback on
-        failure is preserved. The asyncio event loop is single-threaded
-        so no endpoint handler can interleave during the attribute-
-        assignment sweep.
+        Candidate construction happens on a throwaway context that shares
+        only stable resources. If building fails, the live context and its
+        background tasks are preserved. Only after a full candidate exists
+        do we cancel old tasks and copy swappable fields into ``self``.
         """
+        candidate = self.build_candidate_from_config(new_config)
         cancelled = await self.task_registry.cancel_all()
         if cancelled:
             logger.info(
-                "Hot-reload: cancelled %d background task(s) before rebuild",
+                "Hot-reload: cancelled %d background task(s) before runtime swap",
                 cancelled,
             )
-        self._rebuild_components(new_config)
+        self._swap_from_candidate(candidate)
+
+    def build_candidate_from_config(self, new_config: Config) -> RuntimeContext:
+        """Build a replacement runtime without mutating the live context."""
+
+        candidate = RuntimeContext(
+            database=self.database,
+            memory_manager=self.memory_manager,
+            event_hub=self.event_hub,
+            presence=self.presence,
+            task_registry=self.task_registry,
+        )
+        candidate._rebuild_components(new_config)
+        return candidate
+
+    def _swap_from_candidate(self, candidate: RuntimeContext) -> None:
+        """Copy swappable fields from a fully built candidate."""
+
+        for field_name in _SWAPPABLE_RUNTIME_FIELDS:
+            value = getattr(candidate, field_name)
+            if field_name == "degraded_issues":
+                value = list(value)
+            setattr(self, field_name, value)
 
     def _rebuild_components(self, new_config: Config) -> None:
         """Synchronous component construction shared by hot-reload and startup.

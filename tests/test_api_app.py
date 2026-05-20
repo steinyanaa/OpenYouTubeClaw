@@ -21,6 +21,15 @@ def _wait_for_presence_count(ctx: object, expected: int) -> None:
     assert ctx.presence.snapshot()["active_count"] == expected
 
 
+def _wait_for_runtime_subscribers(hub: object, expected: int) -> None:
+    deadline = time.monotonic() + 1.0
+    while time.monotonic() < deadline:
+        if len(getattr(hub, "_subscribers", set())) == expected:
+            return
+        time.sleep(0.01)
+    assert len(getattr(hub, "_subscribers", set())) == expected
+
+
 @pytest.fixture(autouse=True)
 def _isolate_runtime_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep create_app() route tests independent from the developer machine.
@@ -1252,6 +1261,7 @@ class TestBackendAPI:
         client = TestClient(app)
 
         with client.websocket_connect("/api/runtime-stream") as websocket:
+            _wait_for_runtime_subscribers(hub, 1)
             asyncio.run(hub.publish({"type": "refresh.started", "message": "开始给你补候选了"}))
             assert websocket.receive_json() == {
                 "type": "refresh.started",
@@ -1331,7 +1341,9 @@ class TestBackendAPI:
         from openbiliclaw.runtime.events import RuntimeEventHub
 
         monkeypatch.setenv("OPENBILICLAW_PROJECT_ROOT", str(tmp_path))
-        save_config(Config(), tmp_path / "config.toml")
+        cfg = Config()
+        cfg.product_mode = "legacy_multi_source"
+        save_config(cfg, tmp_path / "config.toml")
 
         hub = RuntimeEventHub()
         app = create_app(
@@ -1348,6 +1360,27 @@ class TestBackendAPI:
                 "reason": "missing_cookie",
                 "source": "runtime-stream",
             }
+
+    def test_runtime_stream_does_not_request_legacy_cookie_sync_in_youtube_only_mode(
+        self,
+    ) -> None:
+        from fastapi.testclient import TestClient
+
+        from openbiliclaw.runtime.events import RuntimeEventHub
+
+        hub = RuntimeEventHub()
+        app = create_app(
+            memory_manager=object(),
+            database=object(),
+            soul_engine=object(),
+            runtime_event_hub=hub,
+        )
+        client = TestClient(app)
+
+        with client.websocket_connect("/api/runtime-stream?client=background") as websocket:
+            _wait_for_runtime_subscribers(hub, 1)
+            asyncio.run(hub.publish({"type": "refresh.started"}))
+            assert websocket.receive_json() == {"type": "refresh.started"}
 
     def test_activity_feed_endpoint_returns_live_summary_headline_and_items(self) -> None:
         from fastapi.testclient import TestClient
@@ -3864,7 +3897,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert cfg.sources.bilibili.enabled is False
         assert cfg.sources.xiaohongshu.enabled is False
         assert cfg.sources.xiaohongshu.daily_search_budget == 11
-        assert cfg.sources.douyin.enabled is True
+        assert cfg.sources.douyin.enabled is False
         assert cfg.sources.douyin.cookie_env == "CUSTOM_DY_COOKIE"
         assert cfg.sources.douyin.daily_feed_budget == 13
         assert cfg.sources.youtube.enabled is True
@@ -3872,12 +3905,7 @@ class TestEmbeddingAndCompatProviderE2E:
         assert cfg.sources.youtube.daily_trending_budget == 41
         assert cfg.sources.youtube.daily_channel_budget == 9
         assert cfg.sources.youtube.request_interval_seconds == 4
-        assert cfg.scheduler.pool_source_shares == {
-            "bilibili": 6,
-            "xiaohongshu": 2,
-            "douyin": 2,
-            "youtube": 1,
-        }
+        assert cfg.scheduler.pool_source_shares == {"youtube": 1}
         assert cfg.scheduler.speculation_interval_minutes == 21
         assert cfg.scheduler.auto_update_enabled is True
         assert cfg.scheduler.auto_update_check_interval_hours == 10

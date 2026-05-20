@@ -43,6 +43,15 @@ test("manifest uses side panel instead of popup", () => {
   assert.equal("default_popup" in (manifest.action ?? {}), false);
 });
 
+test("Chrome manifest does not request cookies permission", () => {
+  const root = process.cwd();
+  const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")) as {
+    permissions?: string[];
+  };
+
+  assert.equal(manifest.permissions?.includes("cookies"), false);
+});
+
 test("extension package version files stay aligned", () => {
   const root = process.cwd();
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8")) as {

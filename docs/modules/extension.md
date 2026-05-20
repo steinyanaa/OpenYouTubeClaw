@@ -78,3 +78,6 @@ npm run build
 - **YouTube-only 权限最小化**：公开插件不再请求 Bilibili / 小红书 / 抖音域名权限，降低安装时的认知负担。
 - **双语不阻塞主逻辑**：`popup/i18n.js` 只处理静态 UI 文案；动态推荐内容、画像摘要和 LLM 回复保持后端返回的语言。
 - **保留内部兼容代码**：部分旧字段和 helper 仍存在，避免第一阶段硬分叉引入大规模迁移风险；公开 UI 会隐藏 legacy 平台入口。
+
+
+> 2026-05-20: Chromium `manifest.json` no longer requests the `cookies` permission in the YouTube-only public path. Popup inbox hydration was split into `popup/popup-inbox.js` and covered by characterization tests.

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.87: YouTube-only runtime hardening (2026-05-20)
+
+- Added a `product_mode = "youtube_only"` config guard that force-disables legacy Bilibili/XHS/Douyin source switches and filters scheduler shares to YouTube at config load/update time.
+- Made `/api/config` hot-reload failures structured and runtime-preserving with `phase`, `runtime_preserved`, and `error` response fields.
+- Removed Chromium extension `cookies` permission from the public YouTube-only manifest and added a manifest regression test.
+- Extracted popup inbox hydration logic into `popup-inbox.js` with characterization tests as the first small popup split.
+- Fixed Windows bootstrap init streaming to decode UTF-8 subprocess output consistently during progress parsing.
+- Made runtime event hub publication wake WebSocket subscribers across TestClient/thread event-loop boundaries.
+
 ## v0.3.86: 双语界面与详细使用说明 (2026-05-20)
 
 - README 改为中文主说明并补齐 English README，新增安装、Takeout 初始化、插件加载、日常命令、故障排查与隐私边界。

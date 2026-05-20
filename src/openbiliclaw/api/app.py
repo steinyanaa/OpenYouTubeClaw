@@ -882,36 +882,41 @@ def create_app(
                 from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
 
                 runtime_config = getattr(ctx, "config", None) or config
-                with suppress(Exception):
-                    cookie = resolve_runtime_cookie(
-                        data_dir=runtime_config.data_path,
-                        configured_cookie=runtime_config.bilibili.cookie,
-                    )
-                    if not str(cookie or "").strip():
-                        await websocket.send_json(
-                            {
-                                "type": "bilibili_cookie_sync_requested",
-                                "reason": "missing_cookie",
-                                "source": "runtime-stream",
-                            }
-                        )
-                with suppress(Exception):
-                    dy_cfg = getattr(runtime_config.sources, "douyin", None)
-                    if dy_cfg is not None and bool(getattr(dy_cfg, "enabled", False)):
-                        dy_cookie = resolve_douyin_cookie(
+                youtube_only = (
+                    str(getattr(runtime_config, "product_mode", "youtube_only")).strip().lower()
+                    == "youtube_only"
+                )
+                if not youtube_only:
+                    with suppress(Exception):
+                        cookie = resolve_runtime_cookie(
                             data_dir=runtime_config.data_path,
-                            cookie_env=str(
-                                getattr(dy_cfg, "cookie_env", "OPENBILICLAW_DOUYIN_COOKIE")
-                            ),
+                            configured_cookie=runtime_config.bilibili.cookie,
                         )
-                        if not str(dy_cookie or "").strip():
+                        if not str(cookie or "").strip():
                             await websocket.send_json(
                                 {
-                                    "type": "douyin_cookie_sync_requested",
+                                    "type": "bilibili_cookie_sync_requested",
                                     "reason": "missing_cookie",
                                     "source": "runtime-stream",
                                 }
                             )
+                    with suppress(Exception):
+                        dy_cfg = getattr(runtime_config.sources, "douyin", None)
+                        if dy_cfg is not None and bool(getattr(dy_cfg, "enabled", False)):
+                            dy_cookie = resolve_douyin_cookie(
+                                data_dir=runtime_config.data_path,
+                                cookie_env=str(
+                                    getattr(dy_cfg, "cookie_env", "OPENBILICLAW_DOUYIN_COOKIE")
+                                ),
+                            )
+                            if not str(dy_cookie or "").strip():
+                                await websocket.send_json(
+                                    {
+                                        "type": "douyin_cookie_sync_requested",
+                                        "reason": "missing_cookie",
+                                        "source": "runtime-stream",
+                                    }
+                                )
 
             writer = asyncio.create_task(_send_runtime_events())
             reader = asyncio.create_task(_receive_until_disconnect())
@@ -3429,6 +3434,7 @@ def create_app(
         return ConfigResponse(
             language=cfg.language,
             data_dir=cfg.data_dir,
+            product_mode=getattr(cfg, "product_mode", "youtube_only"),
             degraded=degraded,
             degraded_reason=degraded_reason,
             llm=LLMConfigOut(
@@ -3572,6 +3578,7 @@ def create_app(
             _default_config_path,
             _normalize_extension_disconnect_grace,
             _normalize_pool_source_shares,
+            apply_product_mode_policy,
             load_config,
             save_config,
         )
@@ -3603,6 +3610,8 @@ def create_app(
             cfg.language = str(update["language"])
         if "data_dir" in update:
             cfg.data_dir = str(update["data_dir"])
+        if "product_mode" in update:
+            cfg.product_mode = str(update["product_mode"])
 
         # Apply LLM updates
         if "llm" in update:
@@ -3822,6 +3831,8 @@ def create_app(
             subsection = getattr(section, target[1])
             setattr(subsection, target[2], "")
 
+        apply_product_mode_policy(cfg)
+
         issues = _validate_llm_buildable(cfg, _collect_config_issues(cfg))
         if any(getattr(issue, "severity", "warning") == "blocking" for issue in issues):
             response = ConfigUpdateResponse(
@@ -3837,10 +3848,17 @@ def create_app(
                 reloaded=False,
                 rollback_applied=False,
                 restart_required=False,
+            ).model_dump(mode="json")
+            response.update(
+                {
+                    "phase": "validate",
+                    "runtime_preserved": True,
+                    "error": "config_validation_failed",
+                }
             )
             return JSONResponse(
                 status_code=400,
-                content=response.model_dump(mode="json"),
+                content=response,
             )
 
         async with _CONFIG_SAVE_LOCK:
@@ -3938,14 +3956,22 @@ def create_app(
                     )
                     rollback_applied = True
 
-                return ConfigUpdateResponse(
-                    ok=True,
+                response = ConfigUpdateResponse(
+                    ok=False,
                     config=_config_to_response(rollback_cfg, _collect_config_issues(rollback_cfg)),
                     message=reload_message + rollback_message,
                     reloaded=False,
                     rollback_applied=rollback_applied,
                     restart_required=False,
+                ).model_dump(mode="json")
+                response.update(
+                    {
+                        "phase": "build",
+                        "runtime_preserved": True,
+                        "error": "config_runtime_build_failed",
+                    }
                 )
+                return JSONResponse(status_code=500, content=response)
 
     def _normalize_enabled_sources_override(
         raw_enabled: dict[str, bool] | None,

@@ -23,6 +23,7 @@ _SUPPORTED_OPENAI_AUTH_MODES = {"", "api_key", "codex_oauth"}
 _MIN_POOL_TARGET_COUNT = 1
 _MAX_POOL_TARGET_COUNT = 600
 _DEFAULT_EXTENSION_DISCONNECT_GRACE_SECONDS = 90
+_PRODUCT_MODE_YOUTUBE_ONLY = "youtube_only"
 _DEFAULT_POOL_SOURCE_SHARES = {
     "youtube": 1,
 }
@@ -342,6 +343,7 @@ class Config:
 
     language: str = "zh"
     data_dir: str = "data"
+    product_mode: str = _PRODUCT_MODE_YOUTUBE_ONLY
     llm: LLMConfig = field(default_factory=LLMConfig)
     bilibili: BilibiliConfig = field(default_factory=BilibiliConfig)
     sources: SourcesConfig = field(default_factory=SourcesConfig)
@@ -351,6 +353,10 @@ class Config:
     # Top-level `[soul]` is distinct from `[llm.soul]` (per-module
     # provider override): this carries soul-engine behavior toggles.
     soul: SoulConfig = field(default_factory=SoulConfig)
+
+    def __post_init__(self) -> None:
+        """Apply product-level source policy after dataclass construction."""
+        apply_product_mode_policy(self)
 
     @property
     def data_path(self) -> Path:
@@ -450,6 +456,9 @@ def _apply_env_overrides(raw: dict[str, Any]) -> dict[str, Any]:
 def _build_config(raw: dict[str, Any]) -> Config:
     """Build a Config dataclass from raw dict."""
     general = raw.get("general", {})
+    product_mode = str(general.get("product_mode", _PRODUCT_MODE_YOUTUBE_ONLY)).strip()
+    if not product_mode:
+        product_mode = _PRODUCT_MODE_YOUTUBE_ONLY
     llm_raw = raw.get("llm", {})
     bili_raw = raw.get("bilibili", {})
     sources_raw = raw.get("sources", {})
@@ -567,7 +576,43 @@ def _build_config(raw: dict[str, Any]) -> Config:
         storage=StorageConfig(**store_raw),
         logging=LoggingConfig(**logging_raw),
         soul=soul,
+        product_mode=product_mode,
     )
+
+
+def _is_youtube_only_mode(product_mode: str) -> bool:
+    """Return whether legacy sources must be force-disabled."""
+    return product_mode.strip().lower() == _PRODUCT_MODE_YOUTUBE_ONLY
+
+
+def apply_product_mode_policy(config: Config) -> None:
+    """Apply product-level constraints after config mutation or loading."""
+    config.product_mode = str(config.product_mode or _PRODUCT_MODE_YOUTUBE_ONLY).strip()
+    if not config.product_mode:
+        config.product_mode = _PRODUCT_MODE_YOUTUBE_ONLY
+    if _is_youtube_only_mode(config.product_mode):
+        _apply_youtube_only_source_policy(config.sources, config.scheduler)
+
+
+def _apply_youtube_only_source_policy(
+    sources: SourcesConfig,
+    scheduler: SchedulerConfig,
+) -> None:
+    """Force YouTube-only behavior while keeping legacy fields loadable."""
+    sources.bilibili.enabled = False
+    sources.xiaohongshu.enabled = False
+    sources.douyin.enabled = False
+    scheduler.pool_source_shares = _filter_youtube_pool_source_shares(
+        scheduler.pool_source_shares
+    )
+
+
+def _filter_youtube_pool_source_shares(shares: dict[str, int]) -> dict[str, int]:
+    """Keep only the YouTube share, defaulting to the built-in policy."""
+    youtube_share = shares.get("youtube")
+    if youtube_share is None or youtube_share <= 0:
+        return dict(_DEFAULT_POOL_SOURCE_SHARES)
+    return {"youtube": youtube_share}
 
 
 def _normalize_pool_source_shares(value: object) -> dict[str, int]:
@@ -803,6 +848,7 @@ def _render_config_toml(config: Config) -> str:
     """Render a Config dataclass into TOML."""
     lines = [
         "[general]",
+        f"product_mode = {_toml_string(config.product_mode)}",
         f"language = {_toml_string(config.language)}",
         f"data_dir = {_toml_string(config.data_dir)}",
         "",

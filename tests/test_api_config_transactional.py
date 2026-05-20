@@ -53,6 +53,8 @@ def test_put_config_rejects_unbuildable_candidate_before_writing(
     assert response.status_code == 400
     body = response.json()
     assert body["ok"] is False
+    assert body["phase"] == "validate"
+    assert body["runtime_preserved"] is True
     assert body["reloaded"] is False
     assert body["rollback_applied"] is False
     assert any(
@@ -84,6 +86,48 @@ def test_put_config_success_saves_snapshot_then_hot_reloads(
     assert (tmp_path / "config.toml.bak").read_bytes() == before
 
 
+def test_put_config_applies_youtube_only_guard_after_source_updates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    client = _make_client(monkeypatch, tmp_path, _valid_config())
+
+    response = client.put(
+        "/api/config",
+        json={
+            "sources": {
+                "bilibili": {"enabled": True},
+                "xiaohongshu": {"enabled": True},
+                "douyin": {"enabled": True},
+                "youtube": {"enabled": True},
+            },
+            "scheduler": {
+                "pool_source_shares": {
+                    "bilibili": 7,
+                    "xiaohongshu": 2,
+                    "douyin": 1,
+                    "youtube": 3,
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["config"]["product_mode"] == "youtube_only"
+    assert body["config"]["sources"]["bilibili"]["enabled"] is False
+    assert body["config"]["sources"]["xiaohongshu"]["enabled"] is False
+    assert body["config"]["sources"]["douyin"]["enabled"] is False
+    assert body["config"]["scheduler"]["pool_source_shares"] == {"youtube": 3}
+
+    saved = load_config(config_path)
+    assert saved.sources.bilibili.enabled is False
+    assert saved.sources.xiaohongshu.enabled is False
+    assert saved.sources.douyin.enabled is False
+    assert saved.scheduler.pool_source_shares == {"youtube": 3}
+
+
 def test_put_config_rolls_back_when_hot_reload_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -99,8 +143,11 @@ def test_put_config_rolls_back_when_hot_reload_fails(
 
     response = client.put("/api/config", json={"llm": {"openai": {"model": "gpt-4.1-mini"}}})
 
-    assert response.status_code == 200
+    assert response.status_code == 500
     body = response.json()
+    assert body["ok"] is False
+    assert body["phase"] == "build"
+    assert body["runtime_preserved"] is True
     assert body["reloaded"] is False
     assert body["rollback_applied"] is True
     assert "simulated" in body["message"]
@@ -134,7 +181,8 @@ def test_put_config_hot_reload_failure_file_log_keeps_traceback(
 
     response = client.put("/api/config", json={"llm": {"openai": {"model": "gpt-4.1-mini"}}})
 
-    assert response.status_code == 200
+    assert response.status_code == 500
+    assert response.json()["runtime_preserved"] is True
     for handler in logging.getLogger().handlers:
         if isinstance(handler, logging.FileHandler):
             handler.flush()
@@ -172,6 +220,34 @@ def test_put_config_returns_500_when_rollback_restore_fails(
     assert body["error"] == "config_persistence_corrupted"
     assert "config.toml.bak" in body["manual_recovery"]
     assert config_path.read_bytes() != before
+
+
+def test_put_config_runtime_build_failure_preserves_old_context(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "config.toml"
+    old_recommendation_engine = object()
+    client = _make_client(monkeypatch, tmp_path, _valid_config())
+    client.app.state.runtime_context.recommendation_engine = old_recommendation_engine
+    before = config_path.read_bytes()
+
+    def poison_then_fail(self: RuntimeContext, new_config: Config) -> None:  # noqa: ARG001
+        self.recommendation_engine = object()
+        raise RuntimeError("candidate runtime failed")
+
+    monkeypatch.setattr(RuntimeContext, "_rebuild_components", poison_then_fail)
+
+    response = client.put("/api/config", json={"llm": {"openai": {"model": "gpt-4.1-mini"}}})
+
+    assert response.status_code >= 400
+    body = response.json()
+    assert body["ok"] is False
+    assert body["phase"] == "build"
+    assert body["runtime_preserved"] is True
+    assert "candidate runtime failed" in body["message"]
+    assert client.app.state.runtime_context.recommendation_engine is old_recommendation_engine
+    assert config_path.read_bytes() == before
 
 
 @pytest.mark.asyncio

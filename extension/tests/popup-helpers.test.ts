@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { buildHydratedInboxMessages } from "../popup/popup-inbox.js";
+
 import {
   getActivityCardState,
   buildFeedbackPayload,
@@ -1074,4 +1076,41 @@ test("getHintBannerState normalizes supported tones", () => {
   assert.deepEqual(getHintBannerState("weird"), {
     tone: "info",
   });
+});
+
+
+test("buildHydratedInboxMessages replaces only the interest probe slice with active speculations", () => {
+  const existing = [
+    { type: "interest.probe", domain: "stale", reason: "old", specifics: ["old"] },
+    { type: "delight", bvid: "BV1keep", title: "keep delight" },
+    { domain: "ai", reason: "existing reason", specifics: ["existing"] },
+  ];
+  const speculations = [
+    { domain: "ai", status: "active", reason: "new reason", specifics: ["new"] },
+    { domain: "music", status: "active", reason: "fresh", specifics: ["lofi"] },
+    { domain: "cooldown", status: "cooldown", reason: "skip", specifics: ["skip"] },
+    { domain: "implicit-active", reason: "no status means active", specifics: "not array" },
+    { domain: "", status: "active", reason: "skip blank domain" },
+  ];
+
+  const next = buildHydratedInboxMessages(existing, speculations);
+
+  assert.deepEqual(next, [
+    { type: "delight", bvid: "BV1keep", title: "keep delight" },
+    { domain: "ai", reason: "existing reason", specifics: ["existing"] },
+    { type: "interest.probe", domain: "music", reason: "fresh", specifics: ["lofi"] },
+    {
+      type: "interest.probe",
+      domain: "implicit-active",
+      reason: "no status means active",
+      specifics: [],
+    },
+  ]);
+});
+
+test("buildHydratedInboxMessages returns the original message list when speculations are absent", () => {
+  const existing = [{ type: "delight", bvid: "BV1keep" }];
+
+  assert.equal(buildHydratedInboxMessages(existing, null), existing);
+  assert.equal(buildHydratedInboxMessages(existing, undefined), existing);
 });

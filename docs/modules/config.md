@@ -3,6 +3,7 @@
 
 ## OpenYouTubeClaw YouTube-only defaults (2026-05-20)
 
+- `[general].product_mode` defaults to `"youtube_only"`; this is the config-layer product guard for OpenYouTubeClaw.
 - `[sources.youtube]` is the only enabled platform source by default.
 - `[scheduler.pool_source_shares]` should contain only `youtube = 1` in public config.
 - `[sources.bilibili]`, `[sources.xiaohongshu]`, and `[sources.douyin]` remain parseable for legacy configs but default to `enabled = false` and are filtered out by runtime source policy.
@@ -25,6 +26,7 @@ cp config.example.toml config.toml
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
+| `product_mode` | string | `"youtube_only"` | OpenYouTubeClaw product guard. In `youtube_only`, legacy Bilibili/XHS/Douyin source `enabled=true` values and non-YouTube scheduler shares are ignored at config load. |
 | `language` | string | `"zh"` | Agent 输出语言（`zh` / `en`） |
 | `data_dir` | string | `"data"` | 数据目录（记忆、Cookie、数据库） |
 

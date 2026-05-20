@@ -80,3 +80,6 @@ result = await service.check_and_update_now()
 - SocraticDialogue fallback 若未显式注入 `llm_service`，会继承 `SoulEngine._module_overrides` 再构造 `LLMService`。
 
 `restart_background_tasks()` 在启动后置 one-shot 时只调度 `_safe_post_reload_speculate()`，不会 await speculator 的 `force_tick()`。这保证 popup 保存配置的 HTTP 响应不被一次画像猜测卡住；异常由 helper 吞掉并记录 debug，下一轮正常调度仍会继续。
+
+
+> 2026-05-20: `/api/config` hot reload is transactional: validation/build failures return structured `phase` and `runtime_preserved` fields, preserve the live `RuntimeContext`, and roll back `config.toml` when persistence had already happened.

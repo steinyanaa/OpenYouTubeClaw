@@ -649,6 +649,7 @@ class ConfigResponse(BaseModel):
 
     language: str = "zh"
     data_dir: str = "data"
+    product_mode: str = "youtube_only"
     degraded: bool = False
     degraded_reason: str = ""
     llm: LLMConfigOut = Field(default_factory=LLMConfigOut)
@@ -665,6 +666,7 @@ class ConfigUpdateIn(BaseModel):
 
     language: str | None = None
     data_dir: str | None = None
+    product_mode: str | None = None
     reset_fields: list[str] | None = None
     llm: dict[str, object] | None = None
     bilibili: dict[str, object] | None = None
@@ -690,6 +692,9 @@ class ConfigUpdateResponse(BaseModel):
     reloaded: bool = False
     rollback_applied: bool = False
     restart_required: bool = False
+    phase: str | None = None
+    runtime_preserved: bool | None = None
+    error: str | None = None
 
 
 class SourceShareSuggestionResponse(BaseModel):
