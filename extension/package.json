@@ -1,5 +1,5 @@
 {
-  "name": "openbiliclaw-extension",
+  "name": "openyoutubeclaw-extension",
   "version": "0.3.36",
   "private": true,
   "type": "module",
@@ -8,9 +8,9 @@
     "build:bundle": "node scripts/build.mjs",
     "build:types": "tsc -p tsconfig.json --emitDeclarationOnly",
     "build:firefox": "TARGET=firefox npm run clean && npm run build:types && TARGET=firefox npm run build:bundle",
-    "clean": "rm -rf dist dist-firefox",
+    "clean": "node -e \"const fs=require('node:fs'); for (const d of ['dist','dist-firefox']) fs.rmSync(d,{recursive:true,force:true});\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --experimental-strip-types tests/*.test.ts",
+    "test": "node --test --experimental-strip-types tests/backend-endpoint.test.ts tests/manifest-assets.test.ts tests/notifications.test.ts tests/popup-api.test.ts tests/popup-helpers.test.ts tests/popup-stream.test.ts tests/service-worker-buffer.test.ts tests/service-worker-stream.test.ts tests/video-dwell-tracker.test.ts",
     "package": "node scripts/package.mjs",
     "package:only": "node scripts/package.mjs --no-build",
     "package:firefox": "node scripts/package-firefox.mjs",

@@ -1288,11 +1288,7 @@ def test_source_target_counts_use_platform_default_shares() -> None:
         pool_target_count=600,
     )
 
-    assert controller._source_target_counts() == {
-        "bilibili": 480,
-        "xiaohongshu": 60,
-        "douyin": 60,
-    }
+    assert controller._source_target_counts() == {"youtube": 600}
 
 
 def test_source_target_counts_use_configured_platform_shares() -> None:
@@ -1303,27 +1299,19 @@ def test_source_target_counts_use_configured_platform_shares() -> None:
         discovery_engine=_FakeDiscoveryEngine(),
         recommendation_engine=_FakeRecommendationEngine(),
         pool_target_count=600,
-        pool_source_shares={"bilibili": 6, "xiaohongshu": 2, "douyin": 2},
+        pool_source_shares={"bilibili": 6, "xiaohongshu": 2, "douyin": 2, "youtube": 4},
     )
 
-    assert controller._source_target_counts() == {
-        "bilibili": 360,
-        "xiaohongshu": 120,
-        "douyin": 120,
-    }
+    assert controller._source_target_counts() == {"youtube": 600}
 
 
-def test_source_replenishment_plan_maps_bilibili_deficit_to_bilibili_strategies() -> None:
+def test_source_replenishment_plan_maps_youtube_deficit_to_youtube_strategies() -> None:
     controller = ContinuousRefreshController(
         memory_manager=_FakeMemoryManager(),
         database=_FakeDatabase(
             [],
             pool_count=420,
-            source_counts={
-                "bilibili": 300,
-                "xiaohongshu": 60,
-                "douyin": 60,
-            },
+            source_counts={"youtube": 0},
         ),
         soul_engine=_FakeSoulEngine(),
         discovery_engine=_FakeDiscoveryEngine(),
@@ -1332,7 +1320,7 @@ def test_source_replenishment_plan_maps_bilibili_deficit_to_bilibili_strategies(
     )
 
     assert controller._build_source_replenishment_plan() == [
-        (["search", "related_chain", "trending", "explore"], 180)
+        (["yt_search", "yt_trending", "yt_channel"], 600)
     ]
 
 
@@ -1352,7 +1340,9 @@ def test_disabled_bilibili_share_skips_bilibili_refresh_strategies() -> None:
         signal_event_threshold=1,
     )
 
-    assert controller._build_refresh_plan(_FakeMemoryManager().load_discovery_runtime_state()) == []
+    assert controller._build_refresh_plan(_FakeMemoryManager().load_discovery_runtime_state()) == [
+        (["yt_trending"], 30),
+    ]
 
 
 async def test_refresh_controller_uses_bilibili_deficit_for_discovery_limit() -> None:
@@ -1387,17 +1377,13 @@ async def test_refresh_controller_uses_bilibili_deficit_for_discovery_limit() ->
     }
 
 
-def test_source_replenishment_plan_leaves_xhs_deficit_to_xhs_producer() -> None:
+def test_source_replenishment_plan_is_empty_when_youtube_at_quota() -> None:
     controller = ContinuousRefreshController(
         memory_manager=_FakeMemoryManager(),
         database=_FakeDatabase(
             [],
             pool_count=458,
-            source_counts={
-                "bilibili": 480,
-                "xiaohongshu": 0,
-                "douyin": 60,
-            },
+            source_counts={"youtube": 600},
         ),
         soul_engine=_FakeSoulEngine(),
         discovery_engine=_FakeDiscoveryEngine(),
@@ -1408,7 +1394,7 @@ def test_source_replenishment_plan_leaves_xhs_deficit_to_xhs_producer() -> None:
     assert controller._build_source_replenishment_plan() == []
 
 
-def test_source_replenishment_plan_maps_youtube_deficit_to_youtube_strategies() -> None:
+def test_source_replenishment_plan_maps_youtube_deficit_with_legacy_shares() -> None:
     controller = ContinuousRefreshController(
         memory_manager=_FakeMemoryManager(),
         database=_FakeDatabase(
@@ -1427,7 +1413,7 @@ def test_source_replenishment_plan_maps_youtube_deficit_to_youtube_strategies() 
     )
 
     assert controller._build_source_replenishment_plan() == [
-        (["yt_search", "yt_trending", "yt_channel"], 20)
+        (["yt_search", "yt_trending", "yt_channel"], 100)
     ]
 
 
@@ -1509,9 +1495,7 @@ def test_pool_cap_trim_receives_xhs_family_quota() -> None:
 
     assert controller._enforce_pool_cap() is True
     assert database.trim_source_share_quotas is not None
-    assert database.trim_source_share_quotas["bilibili"] == 480
-    assert database.trim_source_share_quotas["xiaohongshu"] == 60
-    assert database.trim_source_share_quotas["douyin"] == 60
+    assert database.trim_source_share_quotas == {"youtube": 600}
 
 
 def test_pool_cap_enforces_platform_caps_even_when_ready_pool_below_target() -> None:
@@ -1526,11 +1510,7 @@ def test_pool_cap_enforces_platform_caps_even_when_ready_pool_below_target() -> 
     )
 
     assert controller._enforce_pool_cap() is False
-    assert database.trim_overflow_source_share_quotas == {
-        "bilibili": 480,
-        "xiaohongshu": 60,
-        "douyin": 60,
-    }
+    assert database.trim_overflow_source_share_quotas == {"youtube": 600}
 
 
 def test_pool_cap_reactivates_under_quota_sources_before_trim() -> None:
@@ -1546,9 +1526,7 @@ def test_pool_cap_reactivates_under_quota_sources_before_trim() -> None:
 
     assert controller._enforce_pool_cap() is True
     assert database.reactivate_source_share_quotas is not None
-    assert database.reactivate_source_share_quotas["bilibili"] == 480
-    assert database.reactivate_source_share_quotas["xiaohongshu"] == 60
-    assert database.reactivate_source_share_quotas["douyin"] == 60
+    assert database.reactivate_source_share_quotas == {"youtube": 600}
     assert database.trim_source_share_quotas is not None
     assert database.pool_count == 600
 

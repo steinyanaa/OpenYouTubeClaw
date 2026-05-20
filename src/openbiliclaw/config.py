@@ -24,9 +24,6 @@ _MIN_POOL_TARGET_COUNT = 1
 _MAX_POOL_TARGET_COUNT = 600
 _DEFAULT_EXTENSION_DISCONNECT_GRACE_SECONDS = 90
 _DEFAULT_POOL_SOURCE_SHARES = {
-    "bilibili": 8,
-    "xiaohongshu": 1,
-    "douyin": 1,
     "youtube": 1,
 }
 _REMOTE_PROVIDER_FIELDS = {
@@ -196,11 +193,11 @@ class XiaohongshuSourceConfig:
     # interactive prompt and ``OPENBILICLAW_NO_XHS=1`` env var write this
     # back so the runtime stops burning daily_search_budget on an
     # un-installed / un-logged-in xhs extension.
-    enabled: bool = True
-    # Max Soul-driven search tasks the backend may enqueue per day.
-    daily_search_budget: int = 30
-    # Max creator-subscription fetch tasks per day.
-    daily_creator_budget: int = 10
+    enabled: bool = False
+    # Disabled in the YouTube-only fork; kept for legacy config compatibility.
+    daily_search_budget: int = 0
+    # Disabled in the YouTube-only fork; kept for legacy config compatibility.
+    daily_creator_budget: int = 0
     # Seconds the extension dispatcher waits between tasks.
     task_interval_seconds: int = 45
 
@@ -217,9 +214,9 @@ class DouyinSourceConfig:
     enabled: bool = False
     mode: str = "direct"
     cookie_env: str = "OPENBILICLAW_DOUYIN_COOKIE"
-    daily_search_budget: int = 30
-    daily_hot_budget: int = 5
-    daily_feed_budget: int = 30
+    daily_search_budget: int = 0
+    daily_hot_budget: int = 0
+    daily_feed_budget: int = 0
     request_interval_seconds: int = 2
 
 
@@ -233,7 +230,7 @@ class YoutubeSourceConfig:
     subscribed-channel breadth.
     """
 
-    enabled: bool = False
+    enabled: bool = True
     daily_search_budget: int = 6
     daily_trending_budget: int = 50
     daily_channel_budget: int = 10
@@ -244,7 +241,7 @@ class YoutubeSourceConfig:
 class BilibiliSourceConfig:
     """Bilibili discovery source switch."""
 
-    enabled: bool = True
+    enabled: bool = False
 
 
 @dataclass
@@ -359,7 +356,10 @@ class Config:
     def data_path(self) -> Path:
         """Resolved data directory path."""
         p = Path(self.data_dir)
-        if not p.is_absolute():
+        # On Windows, pathlib does not treat POSIX-style `/tmp/...` test
+        # paths as absolute. Keep a leading slash rooted on the current
+        # drive instead of incorrectly resolving it under the project root.
+        if not p.is_absolute() and not str(self.data_dir).startswith("/"):
             p = _project_root() / p
         return p
 
@@ -509,25 +509,25 @@ def _build_config(raw: dict[str, Any]) -> Config:
         browser_cdp_url=sources_browser_raw.get("cdp_url", ""),
         browser_headed=sources_browser_raw.get("headed", False),
         bilibili=BilibiliSourceConfig(
-            enabled=bool(bilibili_source_raw.get("enabled", True)),
+            enabled=bool(bilibili_source_raw.get("enabled", False)),
         ),
         xiaohongshu=XiaohongshuSourceConfig(
-            enabled=bool(xhs_raw.get("enabled", True)),
-            daily_search_budget=int(xhs_raw.get("daily_search_budget", 30)),
-            daily_creator_budget=int(xhs_raw.get("daily_creator_budget", 10)),
+            enabled=bool(xhs_raw.get("enabled", False)),
+            daily_search_budget=int(xhs_raw.get("daily_search_budget", 0)),
+            daily_creator_budget=int(xhs_raw.get("daily_creator_budget", 0)),
             task_interval_seconds=int(xhs_raw.get("task_interval_seconds", 45)),
         ),
         douyin=DouyinSourceConfig(
             enabled=bool(douyin_raw.get("enabled", False)),
             mode=str(douyin_raw.get("mode", "direct")),
             cookie_env=str(douyin_raw.get("cookie_env", "OPENBILICLAW_DOUYIN_COOKIE")),
-            daily_search_budget=int(douyin_raw.get("daily_search_budget", 30)),
-            daily_hot_budget=int(douyin_raw.get("daily_hot_budget", 5)),
-            daily_feed_budget=int(douyin_raw.get("daily_feed_budget", 30)),
+            daily_search_budget=int(douyin_raw.get("daily_search_budget", 0)),
+            daily_hot_budget=int(douyin_raw.get("daily_hot_budget", 0)),
+            daily_feed_budget=int(douyin_raw.get("daily_feed_budget", 0)),
             request_interval_seconds=int(douyin_raw.get("request_interval_seconds", 2)),
         ),
         youtube=YoutubeSourceConfig(
-            enabled=bool(youtube_raw.get("enabled", False)),
+            enabled=bool(youtube_raw.get("enabled", True)),
             daily_search_budget=int(youtube_raw.get("daily_search_budget", 6)),
             daily_trending_budget=int(youtube_raw.get("daily_trending_budget", 50)),
             daily_channel_budget=int(youtube_raw.get("daily_channel_budget", 10)),
@@ -910,9 +910,6 @@ def _render_config_toml(config: Config) -> str:
             f"{config.scheduler.auto_update_check_interval_hours}",
             "",
             "[scheduler.pool_source_shares]",
-            f"bilibili = {int(config.scheduler.pool_source_shares.get('bilibili', 8))}",
-            f"xiaohongshu = {int(config.scheduler.pool_source_shares.get('xiaohongshu', 1))}",
-            f"douyin = {int(config.scheduler.pool_source_shares.get('douyin', 1))}",
             f"youtube = {int(config.scheduler.pool_source_shares.get('youtube', 1))}",
             "",
             "[storage]",

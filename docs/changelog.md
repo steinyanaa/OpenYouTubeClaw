@@ -1,3 +1,11 @@
+
+## v0.3.85: OpenYouTubeClaw hard-fork baseline (2026-05-20)
+
+- Public product path renamed to OpenYouTubeClaw with `openyoutubeclaw` as the primary CLI.
+- YouTube is now the only enabled default source; Bilibili/XHS/Douyin configs remain legacy-disabled.
+- Runtime discovery registers YouTube strategies only and disables Bilibili account sync.
+- Browser extension permissions are trimmed to YouTube plus localhost backend access.
+
 # 变更日志
 
 > 按里程碑记录各阶段交付内容。每次分支合回 main 时追加条目。

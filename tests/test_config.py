@@ -91,17 +91,12 @@ class TestConfigDefaults:
     def test_scheduler_pool_source_shares_defaults(self) -> None:
         config = Config()
 
-        assert config.scheduler.pool_source_shares == {
-            "bilibili": 8,
-            "xiaohongshu": 1,
-            "douyin": 1,
-            "youtube": 1,
-        }
+        assert config.scheduler.pool_source_shares == {"youtube": 1}
 
-    def test_bilibili_source_enabled_defaults_true(self) -> None:
+    def test_bilibili_source_enabled_defaults_false(self) -> None:
         config = Config()
 
-        assert config.sources.bilibili.enabled is True
+        assert config.sources.bilibili.enabled is False
 
     def test_scheduler_pause_on_extension_disconnect_defaults(self) -> None:
         config = Config()
@@ -634,6 +629,7 @@ youtube = 3
 
     config = load_config(toml_path)
 
+    # Legacy non-YouTube shares still parse for compatibility; runtime source policy filters them out.
     assert config.scheduler.pool_source_shares == {
         "bilibili": 7,
         "xiaohongshu": 2,
@@ -668,9 +664,9 @@ def test_sources_browser_defaults_are_empty() -> None:
 def test_sources_xiaohongshu_defaults() -> None:
     config = _build_config({})
 
-    assert config.sources.xiaohongshu.enabled is True
-    assert config.sources.xiaohongshu.daily_search_budget == 30
-    assert config.sources.xiaohongshu.daily_creator_budget == 10
+    assert config.sources.xiaohongshu.enabled is False
+    assert config.sources.xiaohongshu.daily_search_budget == 0
+    assert config.sources.xiaohongshu.daily_creator_budget == 0
     assert config.sources.xiaohongshu.task_interval_seconds == 45
 
 
@@ -680,16 +676,16 @@ def test_sources_douyin_defaults() -> None:
     assert config.sources.douyin.enabled is False
     assert config.sources.douyin.mode == "direct"
     assert config.sources.douyin.cookie_env == "OPENBILICLAW_DOUYIN_COOKIE"
-    assert config.sources.douyin.daily_search_budget == 30
-    assert config.sources.douyin.daily_hot_budget == 5
-    assert config.sources.douyin.daily_feed_budget == 30
+    assert config.sources.douyin.daily_search_budget == 0
+    assert config.sources.douyin.daily_hot_budget == 0
+    assert config.sources.douyin.daily_feed_budget == 0
     assert config.sources.douyin.request_interval_seconds == 2
 
 
 def test_sources_youtube_defaults() -> None:
     config = _build_config({})
 
-    assert config.sources.youtube.enabled is False
+    assert config.sources.youtube.enabled is True
     assert config.sources.youtube.daily_search_budget == 6
     assert config.sources.youtube.daily_trending_budget == 50
     assert config.sources.youtube.daily_channel_budget == 10
@@ -821,12 +817,8 @@ def test_save_config_round_trips_pool_source_shares(tmp_path: Path) -> None:
     save_config(config, config_path)
     loaded = load_config(config_path)
 
-    assert loaded.scheduler.pool_source_shares == {
-        "bilibili": 6,
-        "xiaohongshu": 2,
-        "douyin": 2,
-        "youtube": 1,
-    }
+    # The persisted public config is YouTube-only; legacy shares are dropped.
+    assert loaded.scheduler.pool_source_shares == {"youtube": 1}
 
 
 def test_save_config_round_trips_advanced_scheduler_and_logging_fields(

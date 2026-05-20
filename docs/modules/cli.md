@@ -1,3 +1,22 @@
+# OpenYouTubeClaw CLI update
+
+
+## OpenYouTubeClaw YouTube-only commands (2026-05-20)
+
+Primary public commands:
+
+| Command | Purpose |
+|---|---|
+| `openyoutubeclaw init --youtube-takeout <path>` | Initialize from Google Takeout YouTube data. |
+| `openyoutubeclaw init --youtube-browser` | Initialize from extension-collected YouTube browser signals. |
+| `openyoutubeclaw init --empty-profile` | Initialize with an empty YouTube profile seed. |
+| `openyoutubeclaw import-youtube <path>` | Import YouTube Takeout events. |
+| `openyoutubeclaw fetch-youtube` | Ask the extension to collect logged-in YouTube history/subscriptions/likes. |
+| `openyoutubeclaw discover --source youtube` | Run YouTube discovery (`yt_search`, `yt_trending`, `yt_channel`). |
+| `openyoutubeclaw recommend` | Show local recommendations. |
+
+Legacy Bilibili auth/browser commands may still exist for compatibility but are not part of the YouTube-only product path.
+
 # CLI 命令参考
 
 > 所有已实现的 `openbiliclaw` CLI 命令。

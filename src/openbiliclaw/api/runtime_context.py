@@ -158,24 +158,15 @@ class RuntimeContext:
         registry is empty so no cancel step is required, and remaining
         sync simplifies the FastAPI startup path which is itself sync.
         """
-        from openbiliclaw.bilibili.api import BilibiliAPIClient
-        from openbiliclaw.bilibili.auth import resolve_runtime_cookie
         from openbiliclaw.discovery.engine import (
             ContentDiscoveryEngine,
             DiscoveryConcurrencyController,
-        )
-        from openbiliclaw.discovery.strategies.strategies import (
-            ExploreStrategy,
-            RelatedChainStrategy,
-            SearchStrategy,
-            TrendingStrategy,
         )
         from openbiliclaw.llm import build_llm_registry
         from openbiliclaw.llm.registry import build_embedding_service
         from openbiliclaw.llm.service import LLMService, module_overrides_from_config
         from openbiliclaw.llm.usage_recorder import UsageRecorder
         from openbiliclaw.recommendation.engine import RecommendationEngine
-        from openbiliclaw.runtime.account_sync import AccountSyncService
         from openbiliclaw.runtime.refresh import ContinuousRefreshController
         from openbiliclaw.runtime.updater import AutoUpdateService
         from openbiliclaw.soul.dialogue import SocraticDialogue
@@ -192,13 +183,8 @@ class RuntimeContext:
             module_overrides=new_module_overrides,
         )
 
-        # 2. Bilibili client
-        new_bilibili_client = BilibiliAPIClient(
-            cookie=resolve_runtime_cookie(
-                data_dir=new_config.data_path,
-                configured_cookie=new_config.bilibili.cookie,
-            )
-        )
+        # 2. Legacy Bilibili client disabled in the YouTube-only fork.
+        new_bilibili_client = None
 
         # 3. Soul engine (reuses stable memory_manager)
         # usage_recorder is forwarded so the internal LLMService SoulEngine
@@ -256,107 +242,36 @@ class RuntimeContext:
             concurrency=concurrency,
             embedding_service=new_embedding_service,
         )
-        search_strategy = SearchStrategy(
-            llm_service=new_llm_service,
-            bilibili_client=new_bilibili_client,
-            concurrency=concurrency,
-        )
-        trending_strategy = TrendingStrategy(
-            bilibili_client=new_bilibili_client,
-            llm_service=new_llm_service,
-            concurrency=concurrency,
-        )
-        related_strategy = RelatedChainStrategy(
-            bilibili_client=new_bilibili_client,
-            llm_service=new_llm_service,
-            memory_manager=cast("Any", self.memory_manager),
-            search_strategy=search_strategy,
-            trending_strategy=trending_strategy,
-            concurrency=concurrency,
-        )
-        explore_strategy = ExploreStrategy(
-            llm_service=new_llm_service,
-            bilibili_client=new_bilibili_client,
-            concurrency=concurrency,
-            embedding_service=new_embedding_service,
-            database=cast("Any", self.database),
-        )
-        new_discovery_engine.register_strategy(search_strategy)
-        new_discovery_engine.register_strategy(trending_strategy)
-        new_discovery_engine.register_strategy(related_strategy)
-        new_discovery_engine.register_strategy(explore_strategy)
-
-        # 7b. Register Bilibili source adapter (multi-source Phase 1)
-        from openbiliclaw.sources.bilibili_adapter import BilibiliAdapter
-
-        bilibili_adapter = BilibiliAdapter(
-            search=search_strategy,
-            trending=trending_strategy,
-            related_chain=related_strategy,
-            explore=explore_strategy,
-        )
-        new_discovery_engine.register_adapter(bilibili_adapter)
-
-        # Register Xiaohongshu adapter — content enters the pool via the
-        # extension's API endpoints (POST /api/sources/xhs/observed-urls),
-        # not via adapter.fetch(). The adapter is a stub so the registry
-        # knows "xiaohongshu" is a valid source type.
-        from openbiliclaw.sources.xiaohongshu_adapter import XiaohongshuAdapter
-
-        xiaohongshu_adapter = XiaohongshuAdapter()
-        new_discovery_engine.register_adapter(xiaohongshu_adapter)
-
+        # 7b. YouTube discovery strategies are the only active source in this fork.
         # 7c. YouTube discovery strategies — only registered when the user
         # has YouTube follow events in the DB (i.e. has run init --yes-youtube
         # or fetch-youtube at least once).  Registration is intentionally
         # gated so the strategies don't fire for users who never set up YouTube.
-        try:
-            from openbiliclaw.youtube.client import YtScraperClient
+        yt_enabled = bool(getattr(getattr(new_config.sources, "youtube", None), "enabled", True))
+        if yt_enabled:
+            try:
+                from openbiliclaw.youtube.client import YtScraperClient
 
-            yt_client = YtScraperClient()
-            youtube_strategies = build_youtube_discovery_strategies(
-                config=new_config,
-                client=yt_client,
-                llm_service=new_llm_service,
-                memory=cast("Any", self.memory_manager),
-                concurrency=concurrency,
-            )
-            for strategy in youtube_strategies:
-                new_discovery_engine.register_strategy(strategy)
-            logger.info("YouTube discovery strategies registered")
-        except ImportError as _yt_import_err:
-            logger.info(
-                "YouTube discovery skipped (scrapetube/yt-dlp not installed): %s",
-                _yt_import_err,
-            )
+                yt_client = YtScraperClient()
+                youtube_strategies = build_youtube_discovery_strategies(
+                    config=new_config,
+                    client=yt_client,
+                    llm_service=new_llm_service,
+                    memory=cast("Any", self.memory_manager),
+                    concurrency=concurrency,
+                )
+                for strategy in youtube_strategies:
+                    new_discovery_engine.register_strategy(strategy)
+                logger.info("YouTube discovery strategies registered")
+            except ImportError as _yt_import_err:
+                logger.info(
+                    "YouTube discovery skipped (scrapetube/yt-dlp not installed): %s",
+                    _yt_import_err,
+                )
 
         # 8. Continuous refresh controller
         new_xhs_producer: Any = None
         new_douyin_producer: Any = None
-        if hasattr(self.database, "conn"):
-            from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
-            from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
-
-            xhs_cfg = getattr(new_config.sources, "xiaohongshu", None)
-            sched_cfg = getattr(new_config, "scheduler", None)
-            xhs_enabled = bool(getattr(xhs_cfg, "enabled", True)) and bool(
-                getattr(sched_cfg, "enabled", True)
-            )
-            new_xhs_producer = XhsTaskProducer(
-                task_queue=XhsTaskQueue(self.database),
-                soul_engine=new_soul_engine,
-                llm_service=new_llm_service,
-                enabled=xhs_enabled,
-                daily_budget=int(getattr(xhs_cfg, "daily_search_budget", 30)),
-            )
-            from openbiliclaw.runtime.douyin_producer import build_douyin_discovery_producer
-
-            new_douyin_producer = build_douyin_discovery_producer(
-                config=new_config,
-                database=self.database,
-                soul_engine=new_soul_engine,
-                discovery_engine=new_discovery_engine,
-            )
 
         new_runtime_controller = ContinuousRefreshController(
             memory_manager=self.memory_manager,
@@ -374,14 +289,9 @@ class RuntimeContext:
             task_registry=self.task_registry,
         )
 
-        # 9. Account sync
-        new_account_sync = AccountSyncService(
-            memory_manager=self.memory_manager,
-            bilibili_client=new_bilibili_client,
-            soul_engine=new_soul_engine,
-            sync_interval_hours=new_config.scheduler.account_sync_interval_hours,
-            llm_work_allowed=self.background_llm_work_allowed,
-        )
+        # 9. Account sync is disabled: YouTube history import is explicit via
+        # `fetch-youtube` or `import-youtube`, so the daemon never steals browser focus.
+        new_account_sync = None
 
         # 10. Dialogue (with source management tools)
         from openbiliclaw.sources.tools import SOURCE_TOOLS, SourceToolDispatcher

@@ -769,6 +769,72 @@ def test_runtime_builders_share_database_instance(monkeypatch: pytest.MonkeyPatc
     assert discovery_engine.database is created_databases[0]
 
 
+def test_discovery_builder_registers_youtube_only_without_bilibili_client(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    import openbiliclaw.api.runtime_context as runtime_context_module
+    import openbiliclaw.discovery.engine as discovery_module
+    import openbiliclaw.llm.service as llm_service_module
+    import openbiliclaw.memory.manager as memory_module
+    import openbiliclaw.storage.database as database_module
+
+    class FakeDatabase:
+        def __init__(self, path: Path) -> None:
+            self.path = path
+
+        def initialize(self) -> None:
+            return None
+
+    class FakeMemoryManager:
+        def __init__(self, data_path: Path, database: object | None = None) -> None:
+            self.data_path = data_path
+            self.database = database
+
+        def initialize(self) -> None:
+            return None
+
+    class FakeLLMService:
+        def __init__(self, *, registry: object, memory: object, module_overrides: object | None = None) -> None:
+            self.registry = registry
+            self.memory = memory
+
+    class FakeDiscoveryEngine:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+            self.strategies: list[object] = []
+
+        def register_strategy(self, strategy: object) -> None:
+            self.strategies.append(strategy)
+
+    fake_config = SimpleNamespace(
+        data_path=Path("/tmp/openyoutubeclaw-test-data"),
+        sources=SimpleNamespace(youtube=SimpleNamespace(daily_search_budget=6)),
+        llm=SimpleNamespace(),
+    )
+    yt_strategy = SimpleNamespace(name="yt_search")
+
+    monkeypatch.setattr(cli_module, "_RUNTIME_COMPONENTS", {}, raising=False)
+    monkeypatch.setattr(cli_module, "_build_registry", lambda: "registry", raising=False)
+    monkeypatch.setattr(
+        cli_module,
+        "_build_bilibili_client",
+        lambda: (_ for _ in ()).throw(AssertionError("bilibili client should not be built")),
+        raising=False,
+    )
+    monkeypatch.setattr("openbiliclaw.config.load_config", lambda: fake_config)
+    monkeypatch.setattr(database_module, "Database", FakeDatabase)
+    monkeypatch.setattr(memory_module, "MemoryManager", FakeMemoryManager)
+    monkeypatch.setattr(llm_service_module, "LLMService", FakeLLMService)
+    monkeypatch.setattr(discovery_module, "ContentDiscoveryEngine", FakeDiscoveryEngine)
+    monkeypatch.setattr(runtime_context_module, "build_youtube_discovery_strategies", lambda **_: [yt_strategy])
+
+    discovery_engine = cli_module._build_discovery_engine()
+
+    assert discovery_engine.strategies == [yt_strategy]
+
+
 def test_start_accepts_explicit_host_and_port(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner
 ) -> None:

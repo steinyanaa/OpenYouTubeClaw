@@ -1,5 +1,5 @@
 /**
- * OpenBiliClaw — Background Service Worker
+ * OpenYouTubeClaw — Background Service Worker
  *
  * Receives behavior events from content scripts,
  * buffers them, and forwards to the backend API.
@@ -9,28 +9,6 @@
  */
 
 import { enqueueBufferedEvent, shouldFlushImmediately } from "./buffer.js";
-import {
-  startXhsTaskPolling,
-  handleXhsTaskAlarm,
-  handleTaskResult,
-  pollXhsTaskNow,
-  type XhsTaskResult,
-} from "./xhs-task-dispatcher.js";
-import {
-  startDyTaskPolling,
-  handleDyTaskAlarm,
-  handleDyTaskResult,
-  handleDyScopeResult,
-  handleDySearchTaskResult,
-  handleDyHotTaskResult,
-  handleDyFeedTaskResult,
-  pollDyTaskNow,
-  type DyFeedResult,
-  type DyHotResult,
-  type DyScopeResult,
-  type DySearchResult,
-  type DyTaskResult,
-} from "./dy-task-dispatcher.js";
 import {
   startYtTaskPolling,
   handleYtTaskAlarm,
@@ -44,11 +22,6 @@ import {
   parseNotificationBvid,
   parseCognitionUpdateId,
 } from "./notifications.js";
-import {
-  startCookieSync,
-  handleCookieSyncAlarm,
-  handleCookieSyncRuntimeEvent,
-} from "./cookie-sync.js";
 // Use .ts extension so node:test's --experimental-strip-types resolver
 // (which doesn't rewrite .js → .ts for source-only modules) can follow
 // the import when test files load these dispatchers directly. esbuild
@@ -160,7 +133,7 @@ async function checkPendingNotification(): Promise<void> {
     }
   } catch (err) {
     console.warn(
-      "[OpenBiliClaw] Pending notification ack failed:",
+      "[OpenYouTubeClaw] Pending notification ack failed:",
       err instanceof Error ? err.message : String(err),
     );
   }
@@ -175,8 +148,6 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let runtimeConnectInFlight = false;
 
 function handleRuntimeEvent(event: Record<string, unknown>): void {
-  if (handleCookieSyncRuntimeEvent(event)) return;
-
   const eventType = String(event.type ?? "");
 
   // Task-kick events: the backend broadcasts these from
@@ -186,14 +157,6 @@ function handleRuntimeEvent(event: Record<string, unknown>): void {
   // which is what makes init's 30s collect window reliable.
   // The chrome.alarms 60s poll stays as fallback for the
   // WS-down case.
-  if (eventType === "xhs_task_available") {
-    pollXhsTaskNow();
-    return;
-  }
-  if (eventType === "dy_task_available") {
-    pollDyTaskNow();
-    return;
-  }
   if (eventType === "yt_task_available") {
     pollYtTaskNow();
     return;
@@ -208,7 +171,7 @@ function handleRuntimeEvent(event: Record<string, unknown>): void {
   if (eventType === "extension_reload") {
     if (chrome?.runtime?.reload) {
       // eslint-disable-next-line no-console
-      console.debug("[OpenBiliClaw] runtime-stream → chrome.runtime.reload()");
+      console.debug("[OpenYouTubeClaw] runtime-stream → chrome.runtime.reload()");
       chrome.runtime.reload();
     }
     return;
@@ -347,13 +310,13 @@ async function flushEvents(): Promise<void> {
     });
 
     if (!response.ok) {
-      console.warn("[OpenBiliClaw] Backend returned", response.status);
+      console.warn("[OpenYouTubeClaw] Backend returned", response.status);
       eventBuffer.unshift(...events);
       return;
     }
     await checkPendingNotification();
   } catch {
-    console.warn("[OpenBiliClaw] Backend not available, buffering events");
+    console.warn("[OpenYouTubeClaw] Backend not available, buffering events");
     eventBuffer.unshift(...events);
   }
 }
@@ -371,19 +334,13 @@ function ensureFlushAlarm(): void {
 chrome.runtime.onInstalled.addListener(() => {
   ensureFlushAlarm();
   void connectRuntimeStream();
-  startXhsTaskPolling();
-  startDyTaskPolling();
   startYtTaskPolling();
-  startCookieSync();
 });
 
 chrome.runtime.onStartup.addListener(() => {
   ensureFlushAlarm();
   void connectRuntimeStream();
-  startXhsTaskPolling();
-  startDyTaskPolling();
   startYtTaskPolling();
-  startCookieSync();
 });
 
 chrome.action.onClicked.addListener((tab) => {
@@ -393,104 +350,7 @@ chrome.action.onClicked.addListener((tab) => {
   });
 });
 
-async function postXhsObservedUrls(payload: Record<string, unknown>): Promise<void> {
-  try {
-    await fetch(await apiUrl("/sources/xhs/observed-urls"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Best-effort — missing a batch just means less enrichment coverage.
-  }
-}
-
-async function postXhsTokens(
-  payload: { pairs: Array<{ note_id: string; xsec_token: string }> },
-): Promise<void> {
-  if (!payload?.pairs || payload.pairs.length === 0) return;
-  try {
-    await fetch(await apiUrl("/sources/xhs/tokens"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    // Best-effort — tokens that don't land just stay as bare URLs for now.
-  }
-}
-
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.action === "XHS_URLS_OBSERVED") {
-    void postXhsObservedUrls(message.data as Record<string, unknown>);
-    return;
-  }
-  if (message.action === "XHS_TOKENS_OBSERVED") {
-    void postXhsTokens(
-      message.data as { pairs: Array<{ note_id: string; xsec_token: string }> },
-    );
-    return;
-  }
-  if (message.action === "XHS_TASK_RESULT") {
-    void handleTaskResult(message.data as XhsTaskResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
-  if (message.action === "DY_TASK_RESULT") {
-    void handleDyTaskResult(message.data as DyTaskResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
-  if (message.action === "DY_SCOPE_RESULT") {
-    void handleDyScopeResult(message.data as DyScopeResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
-  if (message.action === "DY_SEARCH_RESULT") {
-    void handleDySearchTaskResult(message.data as DySearchResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
-  if (message.action === "DY_HOT_RESULT") {
-    void handleDyHotTaskResult(message.data as DyHotResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
-  if (message.action === "DY_FEED_RESULT") {
-    void handleDyFeedTaskResult(message.data as DyFeedResult)
-      .then(() => {
-        sendResponse({ ok: true });
-      })
-      .catch((error: unknown) => {
-        sendResponse({ ok: false, error: String(error) });
-      });
-    return true;
-  }
   if (message.action === "YT_SCOPE_RESULT") {
     void handleYtScopeResult(message.data as YtScopeResult)
       .then(() => {
@@ -511,12 +371,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
-  handleXhsTaskAlarm(alarm.name);
-  handleDyTaskAlarm(alarm.name);
   handleYtTaskAlarm(alarm.name);
-  if (handleCookieSyncAlarm(alarm.name)) {
-    return;
-  }
   if (alarm.name === FLUSH_ALARM_NAME) {
     if (eventBuffer.length > 0) {
       void flushEvents();
@@ -554,7 +409,7 @@ chrome.notifications.onClicked.addListener((notificationId) => {
 
 ensureFlushAlarm();
 void connectRuntimeStream();
-startCookieSync();
+startYtTaskPolling();
 
 // Popup writes a new backend port → chrome.storage.onChanged fires here.
 // Close the existing runtime-stream WS so the next connect attempt opens
@@ -578,4 +433,4 @@ onBackendEndpointChange(() => {
   void connectRuntimeStream();
 });
 
-console.log("[OpenBiliClaw] Service worker initialized");
+console.log("[OpenYouTubeClaw] Service worker initialized");

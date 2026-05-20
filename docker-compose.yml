@@ -11,9 +11,9 @@ services:
   # docs/docker-deployment.md.
   ollama:
     image: ollama/ollama:latest
-    container_name: openbiliclaw-ollama
+    container_name: openyoutubeclaw-ollama
     volumes:
-      - openbiliclaw_ollama:/root/.ollama
+      - openyoutubeclaw_ollama:/root/.ollama
     entrypoint:
       - /bin/sh
       - -c
@@ -44,7 +44,7 @@ services:
       start_period: 300s
     restart: unless-stopped
 
-  openbiliclaw-backend:
+  openyoutubeclaw-backend:
     build:
       context: .
       dockerfile: Dockerfile
@@ -54,8 +54,8 @@ services:
       # arm64 on Apple Silicon / Raspberry Pi). To explicitly cross-
       # build a release image, use buildx:
       #   docker buildx build --platform linux/amd64,linux/arm64 \
-      #     -t openbiliclaw-backend:vX.Y.Z .
-    container_name: openbiliclaw-backend
+      #     -t openyoutubeclaw-backend:vX.Y.Z .
+    container_name: openyoutubeclaw-backend
     depends_on:
       # Wait for the ollama sidecar to be ready (daemon up + bge-m3
       # pulled) before the backend boots. Saves users from "embedding
@@ -81,7 +81,7 @@ services:
       - python
       - -m
       - openbiliclaw.docker_runtime
-      - openbiliclaw
+      - openyoutubeclaw
       - serve-api
       - --host
       - 0.0.0.0
@@ -100,9 +100,9 @@ services:
     ports:
       - "8420:8420"
     volumes:
-      - openbiliclaw_config:/app/runtime
-      - openbiliclaw_data:/app/runtime/data
-      - openbiliclaw_logs:/app/runtime/logs
+      - openyoutubeclaw_config:/app/runtime
+      - openyoutubeclaw_data:/app/runtime/data
+      - openyoutubeclaw_logs:/app/runtime/logs
     # Compose-level healthcheck mirrors the Dockerfile HEALTHCHECK so
     # ``docker compose ps`` shows ``healthy`` only when /api/health
     # returns 200, not just when the container process is alive.
@@ -115,9 +115,9 @@ services:
     restart: unless-stopped
 
 volumes:
-  openbiliclaw_config:
-  openbiliclaw_data:
-  openbiliclaw_logs:
+  openyoutubeclaw_config:
+  openyoutubeclaw_data:
+  openyoutubeclaw_logs:
   # Persists ollama models across container recreations so users don't
   # have to re-pull bge-m3 on every rebuild.
-  openbiliclaw_ollama:
+  openyoutubeclaw_ollama:

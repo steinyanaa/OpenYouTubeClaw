@@ -54,16 +54,18 @@ _force_utf8_stdout_on_windows()
 
 
 app = typer.Typer(
-    name="openbiliclaw",
-    help="🦀 OpenBiliClaw — 你的 B 站专属 AI 朋友",
+    name="openyoutubeclaw",
+    help="OpenYouTubeClaw - YouTube-only local AI recommender",
     add_completion=False,
 )
 auth_app = typer.Typer(help="B 站认证命令")
 login_app = typer.Typer(help="账号登录命令")
 browser_app = typer.Typer(help="agent-browser 浏览器命令")
-app.add_typer(auth_app, name="auth")
 app.add_typer(login_app, name="login")
-app.add_typer(browser_app, name="browser")
+# Legacy compatibility: keep Bilibili auth/browser groups callable for old
+# scripts and tests, but they are no longer part of the YouTube-first path.
+app.add_typer(auth_app, name="auth", hidden=True)
+app.add_typer(browser_app, name="browser", hidden=True)
 console = Console()
 _APP_CONTEXT: dict[str, Any] = {}
 _DISCOVER_STRATEGIES_OPTION = typer.Option(
@@ -484,23 +486,18 @@ def _build_memory_manager() -> Any:
 
 
 def _build_discovery_engine() -> Any:
-    """Build the discovery engine with currently implemented strategies."""
+    """Build the YouTube-only discovery engine."""
+    from openbiliclaw.api.runtime_context import build_youtube_discovery_strategies
+    from openbiliclaw.config import load_config
     from openbiliclaw.discovery.engine import (
         ContentDiscoveryEngine,
         DiscoveryConcurrencyController,
     )
-    from openbiliclaw.discovery.strategies.strategies import (
-        ExploreStrategy,
-        RelatedChainStrategy,
-        SearchStrategy,
-        TrendingStrategy,
-    )
     from openbiliclaw.llm.service import LLMService, module_overrides_from_config
+    from openbiliclaw.youtube.client import YtScraperClient
 
     memory = _build_memory_manager()
     database = _get_runtime_database()
-    bilibili_client = _build_bilibili_client()
-    from openbiliclaw.config import load_config
 
     cfg = load_config()
     registry = _build_registry()
@@ -510,13 +507,10 @@ def _build_discovery_engine() -> Any:
         module_overrides=module_overrides_from_config(cfg),
     )
     concurrency = DiscoveryConcurrencyController(
-        bilibili_request_concurrency=2,
-        # Inherit dataclass default (currently 32) — sized so an init
-        # discover's ~32 batches all fan out in a single wave instead
-        # of queueing behind a tight cap. See engine.py for rationale.
+        bilibili_request_concurrency=1,
+        llm_evaluation_concurrency=2,
     )
 
-    # Build embedding service from config (optional)
     from openbiliclaw.llm.registry import build_embedding_service
 
     embedding_service = build_embedding_service(cfg, registry)
@@ -527,36 +521,15 @@ def _build_discovery_engine() -> Any:
         concurrency=concurrency,
         embedding_service=embedding_service,
     )
-    search_strategy = SearchStrategy(
+    yt_client = YtScraperClient()
+    for strategy in build_youtube_discovery_strategies(
+        config=cfg,
+        client=yt_client,
         llm_service=llm_service,
-        bilibili_client=bilibili_client,
+        memory=cast("Any", memory),
         concurrency=concurrency,
-    )
-    trending_strategy = TrendingStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        concurrency=concurrency,
-    )
-    related_strategy = RelatedChainStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        memory_manager=cast("Any", memory),
-        search_strategy=search_strategy,
-        trending_strategy=trending_strategy,
-        concurrency=concurrency,
-    )
-    explore_strategy = ExploreStrategy(
-        llm_service=llm_service,
-        bilibili_client=bilibili_client,
-        concurrency=concurrency,
-        embedding_service=embedding_service,
-        database=database,
-    )
-
-    engine.register_strategy(search_strategy)
-    engine.register_strategy(trending_strategy)
-    engine.register_strategy(related_strategy)
-    engine.register_strategy(explore_strategy)
+    ):
+        engine.register_strategy(strategy)
     return engine
 
 
@@ -3052,7 +3025,7 @@ def start(
     host: str = typer.Option("127.0.0.1", "--host", help="API 监听地址"),
     port: int = typer.Option(8420, "--port", min=1, max=65535, help="API 监听端口"),
 ) -> None:
-    """启动 OpenBiliClaw Agent."""
+    """Start OpenYouTubeClaw Agent."""
     _print_page_title("启动 OpenBiliClaw", "本地 API 服务")
     _ensure_runtime_database_healthy()
     _print_status_panel(
@@ -3501,6 +3474,144 @@ def _format_source_shares(shares: Mapping[str, int]) -> str:
     return ", ".join(f"{labels.get(source, source)}={share}" for source, share in shares.items())
 
 
+
+def _run_youtube_only_init(
+    *,
+    youtube_takeout: str,
+    youtube_browser: bool,
+    skip_youtube_import: bool,
+    skip_yt_prompt: bool,
+    no_youtube: bool,
+    init_start_usage_id: int | None,
+) -> None:
+    """YouTube-first init flow for the OpenYouTubeClaw fork."""
+
+    memory = _build_memory_manager()
+    soul_engine = _build_soul_engine()
+
+    _print_page_title("??? OpenYouTubeClaw", "YouTube ??????")
+    console.print(
+        "[bold yellow]?  ???????? 1?4 ???[/bold yellow]\n"
+        "  YouTube-only ???\n"
+        "    1/4  ?? YouTube ???Takeout ???????\n"
+        "    2/4  ?????LLM ???\n"
+        "    3/4  ?????LLM ???\n"
+        "    4/4  ???? YouTube ???\n"
+    )
+
+    _persist_init_source_enabled_flags(include_xhs=False, include_dy=False, include_yt=True)
+
+    events: list[dict[str, Any]] = []
+    yt_scope_counts: dict[str, int] = {"yt_history": 0, "yt_subscriptions": 0, "yt_likes": 0}
+    yt_status = "skipped"
+
+    _print_section_title("1/4 ?? YouTube ??")
+    if youtube_takeout:
+        from openbiliclaw.youtube.takeout import parse_takeout
+
+        result = parse_takeout(Path(youtube_takeout))
+        for warning in result.warnings:
+            console.print(f"  [yellow]? {warning}[/yellow]")
+        events = list(result.events)
+        yt_scope_counts = {
+            "yt_history": result.stats.watch_history,
+            "yt_subscriptions": result.stats.subscriptions,
+            "yt_likes": result.stats.liked_videos,
+        }
+        yt_status = "ok" if events else "empty"
+        console.print(
+            f"  Takeout: ???? [green]{yt_scope_counts['yt_history']}[/green] ?"
+            f" / ?? [green]{yt_scope_counts['yt_subscriptions']}[/green] ?"
+            f" / ?? [green]{yt_scope_counts['yt_likes']}[/green] ?"
+        )
+    else:
+        include_browser = False
+        if skip_youtube_import or no_youtube or os.environ.get("OPENBILICLAW_NO_YOUTUBE", "").strip() == "1":
+            yt_status = "skipped"
+            if os.environ.get("OPENBILICLAW_NO_YOUTUBE", "").strip() == "1":
+                console.print("  [dim]Skipping YouTube import (OPENBILICLAW_NO_YOUTUBE=1).[/dim]")
+            else:
+                console.print("  [dim]Skipping YouTube import; initializing from an empty profile seed.[/dim]")
+        elif youtube_browser or skip_yt_prompt:
+            include_browser = True
+        elif _is_interactive_terminal():
+            include_browser = _ask_yt_inclusion()
+        if include_browser:
+            yt_task_id = _enqueue_yt_bootstrap_task()
+            if yt_task_id:
+                console.print("  [dim]?????? YouTube ???? / ?? / ???[/dim]")
+            events, yt_scope_counts, yt_status = _collect_yt_bootstrap_events(yt_task_id)
+
+    if events:
+        async def _propagate() -> None:
+            for event in events:
+                await memory.propagate_event(event)
+
+        asyncio.run(_propagate())
+        _maybe_update_init_source_shares({"youtube": len(events)})
+        console.print(f"  ??? [green]{len(events)}[/green] ? YouTube ???")
+    else:
+        console.print("  [yellow]????? YouTube ???????????????[/yellow]")
+
+    _print_section_title("2/4 ????")
+    if events:
+        asyncio.run(
+            _run_with_progress(
+                soul_engine.analyze_events(events, event_chunk_size=200),
+                label="?????YouTube ???",
+                eta_seconds=90,
+            )
+        )
+    else:
+        console.print("  [dim]?????????????[/dim]")
+
+    _print_section_title("3/4 ???? + 4/4 ????")
+    combined_history = _yt_events_to_history_items(events)
+    if not combined_history:
+        combined_history = [
+            {
+                "title": "YouTube ??????",
+                "source_platform": "youtube",
+                "context": "?????? YouTube ?????????? YouTube ?????",
+            }
+        ]
+
+    profile_data = asyncio.run(
+        _run_with_progress(
+            soul_engine.build_initial_profile(combined_history),
+            label="?????YouTube-only?",
+            eta_seconds=70,
+        )
+    )
+    discovered_count = asyncio.run(
+        _run_init_discovery_backfill_async(
+            profile_data,
+            target_pool_count=_INIT_POOL_TARGET_COUNT,
+            label_suffix=" ? YouTube-only ?????",
+        )
+    )
+
+    _print_status_panel("success", "?????", "YouTube-only ?????")
+    _print_key_value_table(
+        "?????",
+        [
+            ("? YouTube ????", f"{int(yt_scope_counts.get('yt_history', 0))} ?"),
+            ("? YouTube ????", f"{int(yt_scope_counts.get('yt_subscriptions', 0))} ?"),
+            ("? YouTube ??", f"{int(yt_scope_counts.get('yt_likes', 0))} ?"),
+            ("?? YouTube ????", f"{len(events)} ?"),
+            ("? ????", "???"),
+            ("?? ??????", f"{discovered_count} ?"),
+        ],
+    )
+    if yt_status in {"empty", "timeout", "failed"}:
+        console.print(
+            "[dim]??  ?? YouTube ??? 0??????? youtube.com???? "
+            "[cyan]openyoutubeclaw import-youtube <takeout.zip>[/cyan] ???[/dim]"
+        )
+    if init_start_usage_id is not None:
+        _print_init_cost_summary(init_start_usage_id)
+    _notify_running_server_init_completed()
+
 @app.command()
 def init(
     no_xhs: bool = typer.Option(
@@ -3533,8 +3644,24 @@ def init(
         "--yes-youtube",
         help="跳过 YouTube 的 y/n 提问,直接启用(适合脚本化场景)。",
     ),
-) -> None:
-    """首次运行：拉取历史、生成画像并补足首轮发现池."""
+
+    youtube_browser: bool = typer.Option(
+        False,
+        "--youtube-browser",
+        help="Collect YouTube history/subscriptions/likes through the browser extension.",
+    ),
+    youtube_takeout: str = typer.Option(
+        "",
+        "--youtube-takeout",
+        help="Import YouTube signals from a Google Takeout .zip file or extracted directory.",
+    ),
+    skip_youtube_import: bool = typer.Option(
+        False,
+        "--skip-youtube-import",
+        "--empty-profile",
+        help="Skip YouTube import and initialize with an empty profile seed.",
+    ),) -> None:
+    """Initialize from YouTube signals, build profile, and seed discovery pool."""
     _prepare_init_runtime()
 
     # Snapshot the highest llm_usage row id seen at start so the
@@ -3546,6 +3673,16 @@ def init(
         init_start_usage_id = _get_runtime_database().max_llm_usage_id()
     except Exception:
         init_start_usage_id = None
+
+    _run_youtube_only_init(
+        youtube_takeout=youtube_takeout,
+        youtube_browser=youtube_browser,
+        skip_youtube_import=skip_youtube_import,
+        skip_yt_prompt=skip_yt_prompt,
+        no_youtube=no_youtube,
+        init_start_usage_id=init_start_usage_id,
+    )
+    return
 
     client = _build_bilibili_client()
     memory = _build_memory_manager()
@@ -4279,7 +4416,7 @@ def _run_single_source_bootstrap(
     summary_renderer(scope_counts, status_label, len(events))
 
 
-@app.command("fetch-douyin")
+@app.command("fetch-douyin", hidden=True)
 def fetch_douyin(
     wait_seconds: float = typer.Option(
         _DEFAULT_DY_BOOTSTRAP_WAIT_SECONDS,
@@ -4337,7 +4474,7 @@ def fetch_douyin(
     )
 
 
-@app.command("search-douyin")
+@app.command("search-douyin", hidden=True)
 def search_douyin(
     keywords: list[str] = _DOUYIN_SEARCH_KEYWORDS_OPTION,
     wait_seconds: float = typer.Option(
@@ -4396,7 +4533,7 @@ def search_douyin(
         console.print("  [yellow]抖音搜索任务失败 —— 检查扩展日志。[/yellow]")
 
 
-@app.command("fetch-xhs")
+@app.command("fetch-xhs", hidden=True)
 def fetch_xhs(
     wait_seconds: float = typer.Option(
         _DEFAULT_XHS_BOOTSTRAP_WAIT_SECONDS,
@@ -4798,7 +4935,7 @@ def profile() -> None:
     )
 
 
-_BILIBILI_STRATEGY_NAMES = ("search", "trending", "explore", "related_chain")
+_YOUTUBE_STRATEGY_NAMES = ("yt_search", "yt_trending", "yt_channel")
 
 
 def _normalize_strategy_names(raw: list[str] | None) -> list[str]:
@@ -5097,7 +5234,7 @@ def _run_douyin_discovery(
         _print_discovered_content_preview(item, index)
 
 
-@app.command("discover-douyin")
+@app.command("discover-douyin", hidden=True)
 def discover_douyin(
     keywords: list[str] | None = _DOUYIN_DISCOVERY_KEYWORDS_OPTION,
     creator_sec_uids: list[str] | None = _DOUYIN_DISCOVERY_CREATOR_SEC_UIDS_OPTION,
@@ -5133,7 +5270,7 @@ def discover_douyin(
 @app.command()
 def discover(
     source: str = typer.Option(
-        "bilibili",
+        "youtube",
         "--source",
         "-s",
         help="触发发现的内容源：bilibili、xiaohongshu 或 douyin。",
@@ -5151,29 +5288,9 @@ def discover(
     from openbiliclaw.soul.engine import SoulProfileNotInitializedError
 
     source_normalized = source.strip().lower()
-    if source_normalized == "xiaohongshu":
-        if strategies:
-            _print_status_panel(
-                "info",
-                "--strategy 仅对 Bilibili 生效",
-                "xiaohongshu 渠道走关键词生产流程，已忽略策略过滤。",
-            )
-        _run_xhs_discovery(force=force)
-        return
-
-    if source_normalized == "douyin":
-        if strategies:
-            _print_status_panel(
-                "info",
-                "--strategy 仅对 Bilibili 生效",
-                "douyin 渠道走 direct-cookie discovery，已忽略策略过滤。",
-            )
-        _run_douyin_discovery(limit=limit)
-        return
-
-    if source_normalized != "bilibili":
+    if source_normalized != "youtube":
         raise typer.BadParameter(
-            f"未知的内容源 `{source}`，当前支持：bilibili、xiaohongshu、douyin。"
+            f"?????? `{source}`?OpenYouTubeClaw ????youtube?"
         )
 
     active_strategies = _normalize_strategy_names(strategies)

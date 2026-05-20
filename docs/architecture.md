@@ -1,3 +1,21 @@
+# OpenYouTubeClaw architecture update
+
+
+## OpenYouTubeClaw YouTube-only architecture (2026-05-20)
+
+```mermaid
+flowchart LR
+  YT[YouTube Takeout / YouTube tab] --> CLI[openyoutubeclaw CLI + extension]
+  CLI --> API[Local FastAPI daemon]
+  API --> DB[(SQLite events/content cache)]
+  DB --> Soul[Soul profile + preference memory]
+  Soul --> Disc[YouTube discovery strategies]
+  Disc --> Rec[Recommendation engine]
+  Rec --> Popup[Extension side panel / CLI output]
+```
+
+Bilibili, Xiaohongshu, and Douyin producers are disabled in the hard-fork default runtime. YouTube history import is explicit (`import-youtube` or `fetch-youtube`); no background account sync runs browser automation.
+
 # 架构设计
 
 ## 系统概览

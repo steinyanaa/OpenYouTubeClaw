@@ -1,3 +1,20 @@
+# OpenYouTubeClaw spec update
+
+
+## 3. System architecture ? OpenYouTubeClaw fork (2026-05-20)
+
+```mermaid
+flowchart LR
+  Input[Google Takeout or YouTube extension task] --> Events[Unified event layer]
+  Events --> Memory[Preference + Soul memory]
+  Memory --> Discovery[yt_search / yt_trending / yt_channel]
+  Discovery --> Cache[content_cache]
+  Cache --> Recommend[Recommendation + delight scoring]
+  Recommend --> User[CLI / browser side panel]
+```
+
+The v1 hard fork is YouTube-only at public interfaces and runtime source policy. Internal package paths stay `openbiliclaw` until a later low-risk rename pass.
+
 # OpenBiliClaw — 项目规格说明书 (SPEC) v0.3
 
 > *你的 B 站专属 AI 朋友，比你更懂你想看什么* 🎯

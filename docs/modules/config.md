@@ -1,3 +1,13 @@
+# OpenYouTubeClaw config module update
+
+
+## OpenYouTubeClaw YouTube-only defaults (2026-05-20)
+
+- `[sources.youtube]` is the only enabled platform source by default.
+- `[scheduler.pool_source_shares]` should contain only `youtube = 1` in public config.
+- `[sources.bilibili]`, `[sources.xiaohongshu]`, and `[sources.douyin]` remain parseable for legacy configs but default to `enabled = false` and are filtered out by runtime source policy.
+- Public CLI examples should use `openyoutubeclaw`; the internal Python package remains `openbiliclaw` for this migration phase.
+
 # 配置参考
 
 > `config.toml` 所有配置段落详解。

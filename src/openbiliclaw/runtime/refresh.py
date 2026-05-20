@@ -22,13 +22,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MAX_DISCOVERY_BACKFILL_PER_REFRESH = 60
-_DEFAULT_PLATFORM_SOURCE_SHARES: dict[str, int] = {
-    "bilibili": 8,
-    "xiaohongshu": 1,
-    "douyin": 1,
-}
-_PLATFORM_SOURCE_ORDER = ("bilibili", "xiaohongshu", "douyin", "youtube")
-_BILIBILI_DISCOVERY_SOURCES = ("search", "related_chain", "trending", "explore")
+_DEFAULT_PLATFORM_SOURCE_SHARES: dict[str, int] = {"youtube": 1}
+_PLATFORM_SOURCE_ORDER = ("youtube",)
+_BILIBILI_DISCOVERY_SOURCES: tuple[str, ...] = ()
 _YOUTUBE_DISCOVERY_SOURCES = ("yt_search", "yt_trending", "yt_channel")
 
 
@@ -981,22 +977,17 @@ class ContinuousRefreshController:
             # the configured pool-source ratio.
             return []
 
-        if "bilibili" not in self._normalized_pool_source_shares():
+        if "youtube" not in self._normalized_pool_source_shares():
             return []
 
         plan: list[tuple[list[str], int]] = []
         if pending_events >= self.signal_event_threshold:
-            plan.append((["search", "related_chain"], self.discovery_limit))
+            plan.append((["yt_search", "yt_channel"], self.discovery_limit))
         if self._is_due(
             str(state.get("last_trending_refresh_at", "")),
             hours=self.trending_refresh_hours,
         ):
-            plan.append((["trending"], self.discovery_limit))
-        if self._is_due(
-            str(state.get("last_explore_refresh_at", "")),
-            hours=self.explore_refresh_hours,
-        ):
-            plan.append((["explore"], self.discovery_limit))
+            plan.append((["yt_trending"], self.discovery_limit))
         return plan
 
     async def refresh_after_event_ingest(self) -> dict[str, object]:
@@ -1497,8 +1488,10 @@ class ContinuousRefreshController:
         for source, target in targets.items():
             if target <= 0:
                 continue
-            if source == "bilibili":
-                continue  # always served by the four discovery strategies
+            if source == "youtube" and self._has_registered_discovery_sources(
+                _YOUTUBE_DISCOVERY_SOURCES
+            ):
+                continue
             if source == "xiaohongshu" and self.xhs_producer is None:
                 stranded.append("xiaohongshu")
             elif source == "douyin" and self.douyin_producer is None:
@@ -1536,16 +1529,6 @@ class ContinuousRefreshController:
                 share = 0
             if share > 0:
                 normalized[source] = share
-        for source, raw_share in raw.items():
-            source_key = str(source).strip().lower()
-            if not source_key or source_key in normalized:
-                continue
-            try:
-                share = int(raw_share)
-            except (TypeError, ValueError):
-                continue
-            if share > 0:
-                normalized[source_key] = share
         return normalized or dict(_DEFAULT_PLATFORM_SOURCE_SHARES)
 
     def _requested_refresh_limit(
