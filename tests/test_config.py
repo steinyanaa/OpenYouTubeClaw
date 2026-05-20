@@ -629,7 +629,8 @@ youtube = 3
 
     config = load_config(toml_path)
 
-    # Legacy non-YouTube shares still parse for compatibility; runtime source policy filters them out.
+    # Legacy non-YouTube shares still parse for compatibility; runtime
+    # source policy filters them out.
     assert config.scheduler.pool_source_shares == {
         "bilibili": 7,
         "xiaohongshu": 2,

@@ -3526,12 +3526,16 @@ def _run_youtube_only_init(
         )
     else:
         include_browser = False
-        if skip_youtube_import or no_youtube or os.environ.get("OPENBILICLAW_NO_YOUTUBE", "").strip() == "1":
+        youtube_disabled = os.environ.get("OPENBILICLAW_NO_YOUTUBE", "").strip() == "1"
+        if skip_youtube_import or no_youtube or youtube_disabled:
             yt_status = "skipped"
-            if os.environ.get("OPENBILICLAW_NO_YOUTUBE", "").strip() == "1":
+            if youtube_disabled:
                 console.print("  [dim]Skipping YouTube import (OPENBILICLAW_NO_YOUTUBE=1).[/dim]")
             else:
-                console.print("  [dim]Skipping YouTube import; initializing from an empty profile seed.[/dim]")
+                console.print(
+                    "  [dim]Skipping YouTube import; "
+                    "initializing from an empty profile seed.[/dim]"
+                )
         elif youtube_browser or skip_yt_prompt:
             include_browser = True
         elif _is_interactive_terminal():
@@ -4948,10 +4952,10 @@ def _normalize_strategy_names(raw: list[str] | None) -> list[str]:
             name = part.strip()
             if name:
                 names.append(name)
-    unknown = [n for n in names if n not in _BILIBILI_STRATEGY_NAMES]
+    unknown = [n for n in names if n not in _YOUTUBE_STRATEGY_NAMES]
     if unknown:
-        allowed = ", ".join(_BILIBILI_STRATEGY_NAMES)
-        raise typer.BadParameter(f"未知的 Bilibili 策略：{', '.join(unknown)}。可选：{allowed}")
+        allowed = ", ".join(_YOUTUBE_STRATEGY_NAMES)
+        raise typer.BadParameter(f"未知的 YouTube 策略：{', '.join(unknown)}。可选：{allowed}")
     # Preserve first-seen order, drop duplicates.
     seen: set[str] = set()
     deduped: list[str] = []

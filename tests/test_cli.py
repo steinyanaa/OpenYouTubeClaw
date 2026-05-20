@@ -796,7 +796,13 @@ def test_discovery_builder_registers_youtube_only_without_bilibili_client(
             return None
 
     class FakeLLMService:
-        def __init__(self, *, registry: object, memory: object, module_overrides: object | None = None) -> None:
+        def __init__(
+            self,
+            *,
+            registry: object,
+            memory: object,
+            module_overrides: object | None = None,
+        ) -> None:
             self.registry = registry
             self.memory = memory
 
@@ -828,7 +834,11 @@ def test_discovery_builder_registers_youtube_only_without_bilibili_client(
     monkeypatch.setattr(memory_module, "MemoryManager", FakeMemoryManager)
     monkeypatch.setattr(llm_service_module, "LLMService", FakeLLMService)
     monkeypatch.setattr(discovery_module, "ContentDiscoveryEngine", FakeDiscoveryEngine)
-    monkeypatch.setattr(runtime_context_module, "build_youtube_discovery_strategies", lambda **_: [yt_strategy])
+    monkeypatch.setattr(
+        runtime_context_module,
+        "build_youtube_discovery_strategies",
+        lambda **_: [yt_strategy],
+    )
 
     discovery_engine = cli_module._build_discovery_engine()
 
@@ -995,6 +1005,7 @@ def test_discover_displays_preview_rows(monkeypatch: pytest.MonkeyPatch, runner:
     assert "相关性分数" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Douyin discover is disabled in the YouTube-only fork")
 def test_discover_douyin_requires_enabled_config(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,
@@ -1012,6 +1023,7 @@ def test_discover_douyin_requires_enabled_config(
     assert "抖音 direct discovery 未启用" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Douyin discover is disabled in the YouTube-only fork")
 def test_discover_douyin_runs_direct_strategy(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,
@@ -1074,6 +1086,7 @@ def test_discover_douyin_runs_direct_strategy(
     assert "douyin" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Douyin discover is disabled in the YouTube-only fork")
 def test_discover_douyin_reads_cookie_from_synced_file(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,
@@ -1123,6 +1136,7 @@ def test_discover_douyin_reads_cookie_from_synced_file(
     assert "没有发现到新抖音内容" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Douyin discover is disabled in the YouTube-only fork")
 def test_discover_douyin_does_not_use_recent_bootstrap_creator_seeds_by_default(
     monkeypatch: pytest.MonkeyPatch,
     runner: CliRunner,
@@ -2003,6 +2017,7 @@ def test_init_reports_authentication_failure(
     assert "auth login" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Bilibili-first init flow was replaced by YouTube-only init")
 def test_init_guides_missing_runtime_config_interactively(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -2113,6 +2128,7 @@ def test_init_guides_missing_runtime_config_interactively(
     assert "历史为空" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Bilibili-first init flow was replaced by YouTube-only init")
 def test_init_guides_missing_auth_interactively(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -2195,6 +2211,7 @@ def test_init_reports_config_error_when_non_interactive(
     assert "llm.openai.api_key" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Bilibili-first init flow was replaced by YouTube-only init")
 def test_init_reports_when_history_is_empty(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -2230,6 +2247,7 @@ def test_init_reports_when_history_is_empty(
     assert "历史为空" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Bilibili-first init flow was replaced by YouTube-only init")
 def test_init_runs_history_preference_profile_and_discovery(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -2363,6 +2381,7 @@ def test_init_runs_history_preference_profile_and_discovery(
     assert fake_discovery.calls
 
 
+@pytest.mark.skip(reason="legacy XHS bootstrap is disabled in the YouTube-only fork")
 def test_init_includes_xhs_bootstrap_events(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -2521,6 +2540,7 @@ def test_init_includes_xhs_bootstrap_events(
     assert any(item.get("title") == "小红书收藏咖啡" for item in built_history)
 
 
+@pytest.mark.skip(reason="legacy Douyin bootstrap is disabled in the YouTube-only fork")
 def test_init_includes_douyin_bootstrap_events_in_analysis_and_profile(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -3053,12 +3073,7 @@ def test_select_init_source_shares_accepts_suggested_ratios(
         },
     )
 
-    assert selected == {
-        "bilibili": 8,
-        "xiaohongshu": 3,
-        "douyin": 1,
-        "youtube": 5,
-    }
+    assert selected == {"youtube": 1}
 
 
 def test_select_init_source_shares_accepts_manual_ratios(
@@ -3090,14 +3105,10 @@ def test_select_init_source_shares_accepts_manual_ratios(
         },
     )
 
-    assert selected == {
-        "bilibili": 6,
-        "xiaohongshu": 2,
-        "douyin": 1,
-        "youtube": 3,
-    }
+    assert selected == {"youtube": 3}
 
 
+@pytest.mark.skip(reason="legacy XHS bootstrap is disabled in the YouTube-only fork")
 def test_init_no_xhs_flag_skips_enqueue(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -3218,6 +3229,7 @@ def test_init_no_xhs_flag_skips_enqueue(
     assert "跳过小红书数据接入" in result.stdout
 
 
+@pytest.mark.skip(reason="legacy Bilibili backfill is disabled in YouTube-only fork")
 def test_init_backfills_pool_in_stages_until_target_is_reached(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:
@@ -3445,6 +3457,7 @@ def test_init_skips_backfill_when_pool_target_is_already_reached(
     assert fake_discovery.calls == []
 
 
+@pytest.mark.skip(reason="legacy Bilibili backfill is disabled in YouTube-only fork")
 def test_init_reports_partial_success_when_discovery_fails(
     monkeypatch: pytest.MonkeyPatch, runner: CliRunner, tmp_path: Path
 ) -> None:

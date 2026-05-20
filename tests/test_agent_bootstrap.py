@@ -25,8 +25,8 @@ bootstrap = _load_bootstrap_module()
 
 
 def test_bootstrap_extends_no_proxy_for_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("NO_PROXY", "example.com")
     monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.setenv("NO_PROXY", "example.com")
 
     bootstrap.ensure_local_no_proxy()
 
