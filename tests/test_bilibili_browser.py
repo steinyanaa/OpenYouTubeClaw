@@ -29,10 +29,28 @@ class _FakeProcess:
         return self._stdout, self._stderr
 
 
-def test_is_available_accepts_explicit_executable_path(tmp_path: Path) -> None:
+def test_is_available_accepts_explicit_executable_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     executable = tmp_path / "agent-browser"
     executable.write_text("#!/bin/sh\n", encoding="utf-8")
     executable.chmod(0o755)
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=[str(executable), "--version"],
+            returncode=0,
+            stdout="agent-browser 1.0.0",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        browser_module,
+        "subprocess",
+        SimpleNamespace(run=fake_run),
+        raising=False,
+    )
 
     browser = BilibiliBrowser(executable=str(executable))
 

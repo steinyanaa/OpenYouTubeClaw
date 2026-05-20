@@ -8,6 +8,7 @@
 - Extracted popup inbox hydration logic into `popup-inbox.js` with characterization tests as the first small popup split.
 - Fixed Windows bootstrap init streaming to decode UTF-8 subprocess output consistently during progress parsing.
 - Made runtime event hub publication wake WebSocket subscribers across TestClient/thread event-loop boundaries.
+- Stabilized the Windows pytest run by tolerating POSIX-style temporary SQLite cleanup semantics and removing Unix-only assumptions from credential/browser tests.
 
 ## v0.3.86: 双语界面与详细使用说明 (2026-05-20)
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import time
 from typing import TYPE_CHECKING
 
@@ -50,7 +51,8 @@ def test_save_load_and_delete_credentials_round_trip(tmp_path: Path) -> None:
     save_codex_credentials(creds, token_path=token_path)
 
     assert load_codex_credentials(token_path=token_path) == creds
-    assert oct(token_path.stat().st_mode & 0o777) == "0o600"
+    if os.name != "nt":
+        assert oct(token_path.stat().st_mode & 0o777) == "0o600"
 
     assert delete_codex_credentials(token_path=token_path) is True
     assert load_codex_credentials(token_path=token_path) is None
