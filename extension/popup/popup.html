@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenBiliClaw</title>
+  <title>OpenYouTubeClaw</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -18,9 +18,9 @@
       --text-main: #20304a;
       --text-secondary: #60708c;
       --text-muted: #8f9bb0;
-      --brand: #fb7299;
-      --brand-strong: #f65788;
-      --brand-soft: rgba(251, 114, 153, 0.12);
+      --brand: #ff0033;
+      --brand-strong: #cc0029;
+      --brand-soft: rgba(255, 0, 51, 0.12);
       --sky: #5aa9ff;
       --sky-soft: rgba(90, 169, 255, 0.14);
       --lime-soft: rgba(96, 204, 154, 0.16);
@@ -3180,6 +3180,37 @@
       gap: 12px;
     }
 
+
+    .language-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(15, 23, 42, 0.1);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .language-switcher select {
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      font: inherit;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .settings-source-card[data-source-card="bilibili"],
+    .settings-source-card[data-source-card="xiaohongshu"],
+    .settings-source-card[data-source-card="douyin"],
+    .settings-source-card[data-source-card="browser"] {
+      display: none;
+    }
+
     .settings-source-card {
       border-radius: 18px;
     }
@@ -3394,9 +3425,9 @@
         <div class="brand">
           <div class="brand-mark" aria-hidden="true"></div>
           <div class="brand-copy">
-            <p class="eyebrow">Bilibili Content Lens</p>
+            <p class="eyebrow">YouTube Content Lens</p>
             <div class="brand-title-row">
-              <h1>OpenBiliClaw</h1>
+              <h1>OpenYouTubeClaw</h1>
               <div id="statusBadge" class="status-badge" data-tone="offline">
                 <div id="statusDot" class="status-dot offline"></div>
                 <span id="statusLabel" class="status-label">未连接</span>
@@ -3412,6 +3443,13 @@
           <button id="settingsGear" class="settings-gear" type="button" title="设置" aria-label="打开设置">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
+          <label class="language-switcher" title="语言 / Language">
+            <span class="language-switcher-label">语言</span>
+            <select id="languageSelect" aria-label="Language">
+              <option value="zh-CN">中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </label>
         </div>
       </div>
       <p class="hero-copy">首页先放一边，这里是你最近更可能点开的。</p>
@@ -3472,7 +3510,7 @@
         </div>
         <div id="profileEmpty" class="empty-state" hidden>
           <h3 id="profileEmptyTitle">画像还没攒起来</h3>
-          <p id="profileEmptyText">先跑一遍 openbiliclaw init，再回来看看。</p>
+          <p id="profileEmptyText">先跑一遍 openyoutubeclaw init，再回来看看。</p>
         </div>
         <div id="profileCard" class="profile-card" hidden>
           <!-- ── 综合叙事 ── -->
@@ -3518,7 +3556,7 @@
             <div id="profileDislikes" class="interest-tree"></div>
           </div>
           <div class="profile-group">
-            <h3>常看的 UP 主</h3>
+            <h3>常看的频道</h3>
             <div id="profileFavoriteUps" class="chip-list"></div>
           </div>
 
@@ -3558,13 +3596,13 @@
           </div>
 
           <!-- ── Cross-cutting ── -->
-          <div class="profile-layer-header">Speculate — 阿B 在试探的方向</div>
+          <div class="profile-layer-header">Speculate — Agent 在试探的方向</div>
           <div class="profile-group">
             <h3>猜测兴趣</h3>
             <div id="profileSpeculativeInterests" class="speculative-list"></div>
           </div>
           <div class="profile-group">
-            <h3>阿B 最近新记住了什么</h3>
+            <h3>Agent 最近新记住了什么</h3>
             <div id="profileRecentMemory" class="cognition-list"></div>
             <div class="cognition-history-footer">
               <p id="profileRecentMemoryStatus" class="cognition-history-status" hidden></p>
@@ -3748,7 +3786,7 @@
           </div>
           <div class="settings-field">
             <label for="cfgOpenrouterTitle">X-Title</label>
-            <input id="cfgOpenrouterTitle" type="text" placeholder="OpenBiliClaw">
+            <input id="cfgOpenrouterTitle" type="text" placeholder="OpenYouTubeClaw">
           </div>
         </div>
         <!-- OpenAI Compatible -->
@@ -4181,7 +4219,7 @@
     <footer id="footerHintBar" class="footer" data-tone="info">
       <div class="footer-head">
         <div class="footer-copy">
-          <p id="hintText" class="footer-hint" aria-live="polite">阿B 这会儿先替你盯着。</p>
+          <p id="hintText" class="footer-hint" aria-live="polite">Agent 这会儿先替你盯着。</p>
           <p id="headlineText" class="footer-headline">最近还没新动静，先多刷一阵。</p>
         </div>
         <button id="activityToggleButton" class="footer-toggle" type="button" aria-expanded="false">更多</button>
@@ -4190,6 +4228,7 @@
     </footer>
   </div>
 
+  <script src="i18n.js"></script>
   <script type="module" src="popup.js"></script>
 </body>
 </html>

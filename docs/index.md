@@ -1,42 +1,38 @@
-# 📖 OpenBiliClaw 文档导航
+# 📖 OpenYouTubeClaw 文档导航
 
-> 本页面是项目文档的一站式入口。
+OpenYouTubeClaw 是 YouTube 专用的本地 AI 推荐 Agent。公开产品名、CLI、浏览器插件、配置样例和文档都以 YouTube 为主路径；内部 Python 包名第一阶段仍保留 `openbiliclaw`，用于降低迁移风险。
 
-## 项目概览
+## 快速入口
 
-- [项目主页](index.html) — GitHub Pages 首页，一句话安装、插件下载、GitHub 入口和产品卖点概览
-- [项目规格说明书 (SPEC)](spec.md) — 完整的项目设计与规划
-- [v0.1 开发任务清单](v0.1-todolist.md) — 当前版本的开发主线
-- [架构设计](architecture.md) — 系统架构与模块关系
-- [记忆系统设计](memory-design.md) — 多层网状记忆架构详解
-- [变更日志](changelog.md) — 各里程碑交付记录
-- [GitHub Releases](https://github.com/whiteguo233/OpenBiliClaw/releases) — 从 `extension-v*` 下载插件、从 `backend-v*` 下载后端桌面包
-- [手动端到端联调](manual-e2e.md) — CLI、插件与 SQLite 的真实联调步骤
-- [OpenClaw 接入最短指南](openclaw-quickstart.md) — Docker 优先、本地兜底的安装、初始化、skill 发现与 CLI bridge 自检
-- [Agent 机器契约 (短)](agent-install.md) — 给 AI 智能体 WebFetch 的短契约,配合 README 的短粘贴语句
-- [Agent 部署详细说明](agent-deployment.md) — 给人看的详细版本 + 所有 JSON 事件/错误码/排查表
-- [Docker 部署指南](docker-deployment.md) — 手动 Docker / docker compose 部署步骤
+- [中文 README](../README.md)：安装、初始化、插件加载、双语界面、日常命令和故障排查。
+- [English README](../README_EN.md)：English quick start and usage guide.
+- [配置参考](modules/config.md)：YouTube-only `config.toml` 字段说明。
+- [CLI 命令参考](modules/cli.md)：`openyoutubeclaw` 命令一览。
+- [YouTube 模块](modules/youtube.md)：Takeout、YouTube client、discovery 策略与任务流。
+- [架构说明](architecture.md)：当前 YouTube-only 数据流。
+- [系统规格](spec.md)：更完整的模块边界与设计约束。
+- [变更日志](changelog.md)：版本交付记录。
 
 ## 模块文档
 
-| 模块 | 文档 | 对应代码 | 状态 |
-|------|------|----------|------|
-| LLM 多模型支持 | [modules/llm.md](modules/llm.md) | `src/openbiliclaw/llm/` | ✅ v0.3.74 统一结构化 JSON 容错 + Ollama embedding 空凭据静默 |
-| B 站接入层 | [modules/bilibili.md](modules/bilibili.md) | `src/openbiliclaw/bilibili/` | ✅ M3 完成 |
-| 多源适配层 | [modules/discovery.md](modules/discovery.md#多源适配层) | `src/openbiliclaw/sources/` | ✅ v0.3.0 落地 B 站 / 小红书 / 通用 Web；v0.3.69 接入抖音插件签名 search / hot / feed discovery 和 YouTube 初始化画像 |
-| YouTube 接入 | [modules/youtube.md](modules/youtube.md) | `src/openbiliclaw/youtube/` + `src/openbiliclaw/sources/yt_tasks.py` | ✅ init / fetch smoke / Google Takeout 导入 |
-| 记忆系统 | [modules/memory.md](modules/memory.md) | `src/openbiliclaw/memory/` | ✅ 完成 |
-| 灵魂引擎 | [modules/soul.md](modules/soul.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
-| 内容发现引擎 | [modules/discovery.md](modules/discovery.md) | `src/openbiliclaw/discovery/` | ✅ v0.3.x 多源 + 跨源跨轮 topic 配额 + 抖音 `DouyinDiscoveryService` |
-| 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ v0.3.x 双轴 fatigue + per-group 候选窗口 + reshuffle 0.6s |
-| 灵魂管线架构 | [modules/soul-pipeline-architecture.md](modules/soul-pipeline-architecture.md) | `src/openbiliclaw/soul/` | ✅ 完成 |
-| 浏览器插件 | [modules/extension.md](modules/extension.md) | `extension/` | ✅ 支持 B 站 + 小红书 + 抖音 + YouTube 任务桥 / 行为采集 / Cookie 同步 / 降级配置修复 |
-| CLI 命令参考 | [modules/cli.md](modules/cli.md) | `src/openbiliclaw/cli.py` | ✅ 持续更新 (含 `setup-embedding` / `discover-douyin` / `fetch-youtube` / `import-youtube`) |
-| 配置参考 | [modules/config.md](modules/config.md) | `config.example.toml` | ✅ 持续更新 (含 `/api/config` 回滚与 `reset_fields`) |
-| 集成适配层 | [modules/integrations.md](modules/integrations.md) | `src/openbiliclaw/integrations/` | ✅ OpenClaw adapter 已接入 |
-| 运行时服务 | [modules/runtime.md](modules/runtime.md) | `src/openbiliclaw/runtime/` | ✅ refresh / presence gate / degraded boot / runtime-stream / backend tag auto-update |
+| 模块 | 文档 | 代码位置 | 状态 |
+| --- | --- | --- | --- |
+| CLI | [modules/cli.md](modules/cli.md) | `src/openbiliclaw/cli.py` | ✅ 主入口为 `openyoutubeclaw` |
+| 配置 | [modules/config.md](modules/config.md) | `src/openbiliclaw/config.py` / `config.example.toml` | ✅ YouTube 默认启用，legacy 源默认关闭 |
+| YouTube 接入 | [modules/youtube.md](modules/youtube.md) | `src/openbiliclaw/youtube/` / `sources/yt_tasks.py` | ✅ Takeout、插件任务、discovery |
+| 发现链路 | [modules/discovery.md](modules/discovery.md) | `src/openbiliclaw/discovery/` | ✅ 运行时只注册 YouTube 策略 |
+| 推荐引擎 | [modules/recommendation.md](modules/recommendation.md) | `src/openbiliclaw/recommendation/` | ✅ source-agnostic |
+| 画像与记忆 | [modules/memory.md](modules/memory.md) | `src/openbiliclaw/memory/` / `soul/` | ✅ 使用 YouTube 行为事件重建 |
+| API / Runtime | [modules/api.md](modules/api.md) | `src/openbiliclaw/api/` / `runtime/` | ✅ 本地 FastAPI + 调度器 |
+| 浏览器插件 | [modules/extension.md](modules/extension.md) | `extension/` | ✅ YouTube + localhost 权限，支持中英双语界面 |
 
-## 开发指南
+## 推荐阅读顺序
 
-- [贡献指南](contributing.md) — 环境搭建、代码规范、文档更新要求
-- [AGENTS.md](../AGENTS.md) — AI 代理开发规则（含文档更新强制要求）
+1. 先读 [README](../README.md) 完成安装和首轮初始化。
+2. 需要调配置时读 [配置参考](modules/config.md)。
+3. 需要脚本化或排查命令时读 [CLI 参考](modules/cli.md)。
+4. 修改数据流或模块边界前，先同步 [架构说明](architecture.md) 与 [系统规格](spec.md)。
+
+## 贡献提醒
+
+根据仓库 `AGENTS.md`：任何改动 CLI、配置、数据流、模块边界、浏览器插件权限或对外文案，都必须同步更新相关模块文档、架构说明与 changelog。

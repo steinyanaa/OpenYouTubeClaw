@@ -1,3 +1,12 @@
+# Changelog
+
+## v0.3.86: 双语界面与详细使用说明 (2026-05-20)
+
+- README 改为中文主说明并补齐 English README，新增安装、Takeout 初始化、插件加载、日常命令、故障排查与隐私边界。
+- 浏览器插件 popup 增加中文 / English 语言切换器，并把首屏、推荐、画像、聊天、设置与 YouTube-only 来源区的核心静态文案接入双语映射。
+- 插件 manifest 描述改为中英双语，设置页隐藏 legacy Bilibili / 小红书 / 抖音 / 通用网页源卡片，仅保留 YouTube 主路径。
+- docs/index.md 重写为 OpenYouTubeClaw 文档导航，标记浏览器插件支持双语界面。
+
 
 ## v0.3.85: OpenYouTubeClaw hard-fork baseline (2026-05-20)
 

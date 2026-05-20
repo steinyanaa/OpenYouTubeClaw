@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "OpenYouTubeClaw",
   "version": "0.3.36",
-  "description": "YouTube-only local AI recommendation agent.",
+  "description": "YouTube 专用本地 AI 推荐 Agent / YouTube-only local AI recommendation agent.",
   "permissions": [
     "activeTab",
     "alarms",
