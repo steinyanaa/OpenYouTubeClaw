@@ -765,8 +765,7 @@ def load_config_with_diagnostics(
         path = Path(config_path)
         diagnostics.config_path = path
         if path.exists():
-            with open(path, "rb") as f:
-                raw = tomllib.load(f)
+            raw = _load_toml_file(path)
         else:
             diagnostics.messages.append(f"未找到配置文件：{path}，当前使用默认配置。")
     else:
@@ -777,8 +776,7 @@ def load_config_with_diagnostics(
         for filename in _CONFIG_FILENAMES:
             path = _project_root() / filename
             if path.exists():
-                with open(path, "rb") as f:
-                    file_data = tomllib.load(f)
+                file_data = _load_toml_file(path)
                 raw = _deep_merge(raw, file_data)
 
     raw = _apply_env_overrides(raw)
@@ -974,3 +972,9 @@ def validate_runtime_config(config: Config) -> None:
     if issues:
         issue = issues[0]
         raise ConfigError(f"{issue.field}: {issue.message}")
+
+
+def _load_toml_file(path: Path) -> dict[str, Any]:
+    """Load a TOML file while tolerating UTF-8 BOM-prefixed files."""
+
+    return tomllib.loads(path.read_text(encoding="utf-8-sig"))

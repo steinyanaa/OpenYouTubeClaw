@@ -639,6 +639,18 @@ youtube = 3
     }
 
 
+def test_load_config_accepts_utf8_bom(tmp_path: Path) -> None:
+    toml_path = tmp_path / "config.toml"
+    toml_path.write_text(
+        "\ufeff[general]\nlanguage = \"en\"\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(toml_path)
+
+    assert config.language == "en"
+
+
 def test_build_config_supports_sources_browser_cdp_url() -> None:
     config = _build_config(
         {
