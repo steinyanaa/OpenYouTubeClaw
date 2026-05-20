@@ -1,0 +1,145 @@
+[general]
+language = "zh"
+data_dir = "data"
+
+[llm]
+default_provider = "openai"
+
+[llm.openai]
+api_key = ""
+model = "gpt-5-nano"
+base_url = ""
+auth_mode = ""
+
+[llm.claude]
+api_key = ""
+model = "claude-sonnet-4-6"
+
+[llm.gemini]
+api_key = ""
+model = "gemini-2.5-flash"
+
+[llm.deepseek]
+api_key = ""
+model = "deepseek-v4-flash"
+base_url = "https://api.deepseek.com"
+reasoning_effort = "max"
+
+[llm.ollama]
+api_key = ""
+model = "qwen2.5:7b"
+base_url = "http://localhost:11434/v1"
+
+[llm.openrouter]
+api_key = ""
+model = "openai/gpt-5-nano"
+base_url = "https://openrouter.ai/api/v1"
+http_referer = ""
+x_title = "OpenBiliClaw"
+
+[llm.openai_compatible]
+api_key = ""
+model = ""
+base_url = ""
+
+[llm.embedding]
+provider = ""
+model = ""
+api_key = ""
+base_url = ""
+similarity_threshold = 0.82
+
+# Per-module LLM overrides (empty = use global default)
+[llm.soul]
+provider = ""
+model = ""
+
+[llm.discovery]
+provider = ""
+model = ""
+
+[llm.recommendation]
+provider = ""
+model = ""
+
+[llm.evaluation]
+provider = ""
+model = ""
+
+[bilibili]
+auth_method = "cookie"
+cookie = ""
+
+[bilibili.browser]
+executable = ""
+headed = false
+
+[sources.browser]
+cdp_url = ""
+headed = false
+
+[sources.bilibili]
+enabled = false
+
+[sources.xiaohongshu]
+enabled = false
+daily_search_budget = 30
+daily_creator_budget = 10
+task_interval_seconds = 45
+
+[sources.douyin]
+enabled = false
+mode = "direct"
+cookie_env = "OPENBILICLAW_DOUYIN_COOKIE"
+daily_search_budget = 0
+daily_hot_budget = 0
+daily_feed_budget = 0
+request_interval_seconds = 2
+
+[sources.youtube]
+enabled = true
+daily_search_budget = 6
+daily_trending_budget = 50
+daily_channel_budget = 10
+request_interval_seconds = 2
+
+[scheduler]
+enabled = true
+pause_on_extension_disconnect = false
+extension_disconnect_grace_seconds = 90
+discovery_cron = "0 */8 * * *"
+pool_target_count = 600
+account_sync_interval_hours = 6
+speculation_interval_minutes = 10
+speculation_ttl_days = 3
+speculation_cooldown_days = 7
+speculation_confirmation_threshold = 3
+speculation_max_active = 5
+speculation_max_primary_interests = 15
+speculation_max_secondary_interests = 60
+auto_update_enabled = false
+auto_update_check_interval_hours = 6
+
+[scheduler.pool_source_shares]
+youtube = 1
+
+[storage]
+db_path = "data/openbiliclaw.db"
+
+[logging]
+level = "INFO"
+file_level = "DEBUG"
+directory = "logs"
+filename = "openbiliclaw.log"
+max_file_size_mb = 100
+backup_count = 1
+aggregate_budget_mb = 500
+unmanaged_truncate_mb = 200
+unmanaged_max_age_days = 30
+
+[soul.preference]
+# v0.3.x event-satisfaction signal. When true, preference
+# analysis ignores passive negative events such as quick_exit.
+# Explicit dislike feedback is retained as disliked_topics
+# evidence instead of being learned as a positive interest.
+satisfaction_filter_enabled = true

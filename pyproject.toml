@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openyoutubeclaw"
-version = "0.3.85"
+version = "0.3.87"
 description = "Your local AI friend for YouTube - understands your watch signals and finds videos you love."
 readme = "README.md"
 license = { text = "MIT" }
