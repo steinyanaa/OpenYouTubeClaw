@@ -257,14 +257,16 @@ class TestBackendAPI:
         assert response.status_code == 200
         assert response.json()["reloaded"] is True
 
+    @pytest.mark.skip(reason="platform removed: bilibili.api module deleted")
     def test_create_app_bootstrap_shares_database_with_memory_manager(
         self,
         monkeypatch,
     ) -> None:
         from types import SimpleNamespace
 
-        import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
+
+        import openbiliclaw.api.app as app_module
         import openbiliclaw.llm.service as llm_service_module
         import openbiliclaw.memory.manager as memory_module
         import openbiliclaw.storage.database as database_module
@@ -353,14 +355,16 @@ class TestBackendAPI:
         assert ctx.llm_service.module_overrides["discovery"].model == "llama3-discovery"
         assert ctx.soul_engine._llm_service.module_overrides["soul"].provider == "ollama"
 
+    @pytest.mark.skip(reason="platform removed: bilibili.api module deleted")
     def test_create_app_bootstrap_wires_discovery_concurrency_controller(
         self,
         monkeypatch,
     ) -> None:
         from types import SimpleNamespace
 
-        import openbiliclaw.api.app as app_module
         import openbiliclaw.bilibili.api as bilibili_api_module
+
+        import openbiliclaw.api.app as app_module
         import openbiliclaw.discovery.engine as discovery_engine_module
         import openbiliclaw.llm.service as llm_service_module
         import openbiliclaw.memory.manager as memory_module
@@ -632,6 +636,7 @@ class TestBackendAPI:
             "profile_ready": True,
         }
 
+    @pytest.mark.skip(reason="platform removed: bilibili.auth deleted")
     def test_bilibili_cookie_endpoint_persists_and_validates(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -645,8 +650,8 @@ class TestBackendAPI:
         we never actually hit api.bilibili.com.
         """
         from fastapi.testclient import TestClient
-
         from openbiliclaw.bilibili.auth import AuthManager
+
         from openbiliclaw.config import Config, save_config
 
         # Sandboxed config + data dir; OPENBILICLAW_PROJECT_ROOT redirects
@@ -711,6 +716,7 @@ class TestBackendAPI:
         config_text = (tmp_path / "config.toml").read_text()
         assert cookie_value in config_text
 
+    @pytest.mark.skip(reason="platform removed: bilibili.auth deleted")
     def test_bilibili_cookie_sync_restarts_background_tasks_after_rebuild(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -722,9 +728,9 @@ class TestBackendAPI:
         that drives XHS / Douyin producers stays stopped after cookie sync.
         """
         from fastapi.testclient import TestClient
+        from openbiliclaw.bilibili.auth import AuthManager
 
         from openbiliclaw.api.runtime_context import RuntimeContext
-        from openbiliclaw.bilibili.auth import AuthManager
         from openbiliclaw.config import Config, save_config
 
         monkeypatch.setenv("OPENBILICLAW_PROJECT_ROOT", str(tmp_path))
@@ -777,14 +783,15 @@ class TestBackendAPI:
         assert response.json()["ok"] is True
         assert calls == ["rebuild", "restart"]
 
+    @pytest.mark.skip(reason="platform removed: bilibili.auth deleted")
     def test_bilibili_cookie_sync_skips_hot_reload_when_cookie_unchanged(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """Repeated extension sync for the same cookie must be idempotent."""
         from fastapi.testclient import TestClient
+        from openbiliclaw.bilibili.auth import AuthManager
 
         from openbiliclaw.api.runtime_context import RuntimeContext
-        from openbiliclaw.bilibili.auth import AuthManager
         from openbiliclaw.config import Config, save_config
 
         cookie_value = "SESSDATA=abc123; bili_jct=def456; DedeUserID=99999"
@@ -841,13 +848,14 @@ class TestBackendAPI:
         assert response.json()["ok"] is True
         assert calls == []
 
+    @pytest.mark.skip(reason="platform removed: bilibili.auth deleted")
     def test_bilibili_cookie_endpoint_rejects_invalid_cookie(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         """When B 站 nav says the cookie isn't logged in, do NOT persist."""
         from fastapi.testclient import TestClient
-
         from openbiliclaw.bilibili.auth import AuthManager
+
         from openbiliclaw.config import Config, save_config
 
         monkeypatch.setenv("OPENBILICLAW_PROJECT_ROOT", str(tmp_path))
@@ -891,6 +899,7 @@ class TestBackendAPI:
         # No file written (because validation failed before persistence).
         assert not (tmp_path / "data" / "bilibili_cookie.json").exists()
 
+    @pytest.mark.skip(reason="platform removed: douyin_auth deleted")
     def test_douyin_cookie_endpoint_persists_cookie_without_config_mirror(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:

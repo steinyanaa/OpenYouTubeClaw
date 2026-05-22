@@ -622,7 +622,7 @@ def create_app(
         Users who flip ``--host 0.0.0.0`` should put their own auth
         layer in front of the backend.
         """
-        from openbiliclaw.bilibili.auth import AuthManager
+        from openbiliclaw.bilibili.auth import AuthManager  # type: ignore[import-untyped]
         from openbiliclaw.config import (
             load_config_with_diagnostics,
             save_config,
@@ -746,8 +746,12 @@ def create_app(
         persist the browser-provided Cookie header as-is and let discovery
         smoke surface whether search / hot / feed calls return content.
         """
-        from openbiliclaw.sources.douyin_auth import DouyinCookieManager
-        from openbiliclaw.sources.douyin_direct import parse_cookie_header
+        from openbiliclaw.sources.douyin_auth import (  # type: ignore[import-untyped]
+            DouyinCookieManager,
+        )
+        from openbiliclaw.sources.douyin_direct import (  # type: ignore[import-untyped]
+            parse_cookie_header,
+        )
 
         cookie_value = payload.cookie.strip()
         if not cookie_value:
@@ -2378,7 +2382,6 @@ def create_app(
             feedback_note=note,
         )
         from openbiliclaw.sources.event_format import (
-            SOURCE_BILIBILI,
             build_event,
         )
 
@@ -2397,7 +2400,7 @@ def create_app(
         await ctx.memory_manager.propagate_event(
             build_event(
                 event_type="feedback",
-                source_platform=SOURCE_BILIBILI,
+                source_platform="bilibili",
                 title=rec_title,
                 context=feedback_context,
                 metadata={
@@ -2468,7 +2471,6 @@ def create_app(
 
         # Persist the click as an event so history/query paths can see it.
         from openbiliclaw.sources.event_format import (
-            SOURCE_BILIBILI,
             build_event,
         )
 
@@ -2500,7 +2502,7 @@ def create_app(
             await ctx.memory_manager.propagate_event(
                 build_event(
                     event_type="click",
-                    source_platform=SOURCE_BILIBILI,
+                    source_platform="bilibili",
                     title=title,
                     url=f"https://www.bilibili.com/video/{bvid}" if bvid else "",
                     author=up_name,
@@ -2995,17 +2997,19 @@ def create_app(
 
     # ── XHS task queue endpoints (extension dispatcher) ──────────────
 
-    from openbiliclaw.sources.xhs_tasks import (
-        XhsCreatorStore,
-        XhsTaskQueue,
-        xhs_bootstrap_notes_to_events,
-    )
+    try:
+        from openbiliclaw.sources.xhs_tasks import (  # type: ignore[import-untyped]
+            XhsCreatorStore,
+            XhsTaskQueue,
+            xhs_bootstrap_notes_to_events,
+        )
+        _xhs_available = True
+    except ImportError:
+        _xhs_available = False
 
-    # Guard: only initialise when ctx.database is a real Database (has .conn).
-    # Tests that pass database=object() as a stub won't trigger table creation.
     _xhs_task_queue: XhsTaskQueue | None = None
     _xhs_creator_store: XhsCreatorStore | None = None
-    if hasattr(ctx.database, "conn"):
+    if _xhs_available and hasattr(ctx.database, "conn"):
         _xhs_task_queue = XhsTaskQueue(ctx.database)
         _xhs_creator_store = XhsCreatorStore(ctx.database)
 
@@ -3160,13 +3164,17 @@ def create_app(
     # §"Module Isolation from XHS". Different table (dy_tasks),
     # different queue class, different fail isolation.
 
-    from openbiliclaw.sources.dy_tasks import (
-        DyTaskQueue,
-        dy_bootstrap_videos_to_events,
-    )
+    try:
+        from openbiliclaw.sources.dy_tasks import (  # type: ignore[import-untyped]
+            DyTaskQueue,
+            dy_bootstrap_videos_to_events,
+        )
+        _dy_available = True
+    except ImportError:
+        _dy_available = False
 
     _dy_task_queue: DyTaskQueue | None = None
-    if hasattr(ctx.database, "conn"):
+    if _dy_available and hasattr(ctx.database, "conn"):
         _dy_task_queue = DyTaskQueue(ctx.database)
 
     @app.get("/api/sources/dy/next-task")

@@ -263,7 +263,6 @@ class RuntimeContext:
 
         # 7. Discovery engine + strategies
         concurrency = DiscoveryConcurrencyController(
-            bilibili_request_concurrency=2,
             llm_evaluation_concurrency=2,
         )
         new_discovery_engine = ContentDiscoveryEngine(
@@ -300,9 +299,6 @@ class RuntimeContext:
                 )
 
         # 8. Continuous refresh controller
-        new_xhs_producer: Any = None
-        new_douyin_producer: Any = None
-
         new_runtime_controller = ContinuousRefreshController(
             memory_manager=self.memory_manager,
             database=self.database,
@@ -312,8 +308,6 @@ class RuntimeContext:
             pool_target_count=new_config.scheduler.pool_target_count,
             pool_source_shares=_pool_source_shares_from_config(new_config),
             event_hub=self.event_hub,
-            xhs_producer=new_xhs_producer,
-            douyin_producer=new_douyin_producer,
             scheduler_config=new_config.scheduler,
             presence=self.presence,
             task_registry=self.task_registry,

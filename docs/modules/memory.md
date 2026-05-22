@@ -125,7 +125,7 @@ memory.initialize()
 # 写入事件
 await memory.propagate_event({
     "event_type": "view",           # view|pause|seek|search|favorite|like|coin|comment|click|scroll|hover|snapshot|feedback
-    "url": "https://www.bilibili.com/video/BV1xx",
+    "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     "title": "视频标题",
     "metadata": {"bvid": "BV1xx"},
 })

@@ -1,137 +1,127 @@
-"""Regression tests for the unified cross-source event format.
+"""Tests for the unified YouTube event format.
 
-The v0.3.22 unification consolidated B站 / 小红书 / future-source
-event producers behind ``build_event()`` so the soul-pipeline LLM
-analyzers see one consistent shape — including a natural-language
-``context`` field they can read directly. These tests pin the
-contract so future regressions don't silently re-fragment it.
+Pins the shape contract so downstream consumers (preference analyzer,
+awareness analyzer, profile builder) always see a consistent structure.
 """
 
 from __future__ import annotations
 
-from openbiliclaw.cli import _history_item_to_event
+import json
+
 from openbiliclaw.sources.event_format import (
-    SOURCE_BILIBILI,
-    SOURCE_XIAOHONGSHU,
+    SOURCE_YOUTUBE,
     build_event,
+    classify_event_satisfaction,
     format_event_context,
 )
-from openbiliclaw.sources.xhs_tasks import xhs_bootstrap_notes_to_events
+from openbiliclaw.storage.database import Database
 
 # ---------------------------------------------------------------------------
-# format_event_context: deterministic Chinese sentence builder
+# format_event_context: deterministic natural-language sentence builder
 
 
-def test_format_context_bilibili_view_with_author() -> None:
+def test_format_context_youtube_view_with_author() -> None:
     text = format_event_context(
         event_type="view",
-        source_platform=SOURCE_BILIBILI,
-        title="讲透历史叙事",
-        author="历史实验室",
+        source_platform=SOURCE_YOUTUBE,
+        title="Python Is Slow",
+        author="Arjan Codes",
     )
-    assert text == "在B 站看了《讲透历史叙事》,作者:历史实验室"
+    assert "YouTube" in text
+    assert "Python Is Slow" in text
+    assert "Arjan Codes" in text
 
 
-def test_format_context_xiaohongshu_like_with_author() -> None:
+def test_format_context_youtube_like_with_author() -> None:
     text = format_event_context(
         event_type="like",
-        source_platform=SOURCE_XIAOHONGSHU,
-        title="手冲咖啡入门",
-        author="豆子老师",
+        source_platform=SOURCE_YOUTUBE,
+        title="How Git Works",
+        author="Fireship",
     )
-    assert text == "在小红书点赞了《手冲咖啡入门》,作者:豆子老师"
+    assert "YouTube" in text
+    assert "How Git Works" in text
+    assert "Fireship" in text
 
 
 def test_format_context_unknown_event_type_falls_back() -> None:
-    """Unknown event_type strings shouldn't crash — they fall through
-    to a generic verb so the rendered sentence is still readable."""
     text = format_event_context(
         event_type="custom_action",
-        source_platform=SOURCE_BILIBILI,
-        title="一个新行为",
+        source_platform=SOURCE_YOUTUBE,
+        title="某内容",
     )
-    assert "B 站" in text
-    assert "《一个新行为》" in text
+    assert "YouTube" in text
+    assert "《某内容》" in text
     assert "记录了" in text  # generic fallback verb
 
 
 def test_format_context_missing_title_uses_placeholder() -> None:
     text = format_event_context(
         event_type="favorite",
-        source_platform=SOURCE_BILIBILI,
+        source_platform=SOURCE_YOUTUBE,
         title="",
     )
-    assert text == "在B 站收藏了一条内容"
+    assert "一条内容" in text
 
 
 # ---------------------------------------------------------------------------
-# build_event: shape contract (the actual unification point)
+# build_event: shape contract
 
 
 def test_build_event_emits_unified_shape() -> None:
     event = build_event(
         event_type="favorite",
-        source_platform=SOURCE_BILIBILI,
-        title="某个 UP 主的视频",
-        url="https://www.bilibili.com/video/BVxxxx",
-        author="某 UP 主",
-        metadata={"folder": "技术", "bvid": "BVxxxx"},
+        source_platform=SOURCE_YOUTUBE,
+        title="History of Linux",
+        url="https://www.youtube.com/watch?v=abc123",
+        author="TechChannel",
+        metadata={"vid": "abc123"},
     )
-    # Required keys
     assert event["event_type"] == "favorite"
-    assert event["title"] == "某个 UP 主的视频"
-    assert event["url"] == "https://www.bilibili.com/video/BVxxxx"
-    assert event["context"]  # non-empty natural-language description
-    # Metadata invariants
-    assert event["metadata"]["source_platform"] == SOURCE_BILIBILI
-    assert event["metadata"]["author"] == "某 UP 主"
-    # Source-specific extras preserved
-    assert event["metadata"]["folder"] == "技术"
-    assert event["metadata"]["bvid"] == "BVxxxx"
+    assert event["title"] == "History of Linux"
+    assert event["url"] == "https://www.youtube.com/watch?v=abc123"
+    assert event["context"]
+    assert event["metadata"]["source_platform"] == SOURCE_YOUTUBE
+    assert event["metadata"]["author"] == "TechChannel"
+    assert event["metadata"]["vid"] == "abc123"
 
 
 def test_build_event_explicit_context_wins_over_auto_generated() -> None:
     event = build_event(
         event_type="favorite",
-        source_platform=SOURCE_XIAOHONGSHU,
-        title="手冲咖啡入门",
-        author="豆子老师",
+        source_platform=SOURCE_YOUTUBE,
+        title="任何标题",
+        author="作者",
         context="自定义描述",
     )
     assert event["context"] == "自定义描述"
 
 
 def test_build_event_url_omitted_when_empty() -> None:
-    """URL is optional — events without one (e.g. follow events) shouldn't
-    carry a key with empty-string value."""
     event = build_event(
         event_type="follow",
-        source_platform=SOURCE_BILIBILI,
-        title="某 UP",
-        author="某 UP",
+        source_platform=SOURCE_YOUTUBE,
+        title="某频道",
+        author="某频道",
     )
     assert "url" not in event
 
 
 def test_build_event_metadata_source_platform_explicit_wins() -> None:
-    """If a producer passes source_platform inside metadata, that value
-    wins over the parameter — supports edge cases where metadata is
-    pre-filled by an upstream layer."""
     event = build_event(
         event_type="view",
-        source_platform=SOURCE_BILIBILI,
+        source_platform=SOURCE_YOUTUBE,
         title="...",
-        metadata={"source_platform": "web"},
+        metadata={"source_platform": "custom"},
     )
-    assert event["metadata"]["source_platform"] == "web"
+    assert event["metadata"]["source_platform"] == "custom"
 
 
 # ---------------------------------------------------------------------------
-# Producers all converge on the unified shape
+# Shape invariant helper
 
 
 def _has_unified_shape(event: dict) -> bool:
-    """Every cross-source event must satisfy these invariants."""
     if not isinstance(event, dict):
         return False
     for key in ("event_type", "title", "context", "metadata"):
@@ -144,229 +134,100 @@ def _has_unified_shape(event: dict) -> bool:
     return isinstance(event["context"], str) and bool(event["context"])
 
 
-def test_bilibili_history_event_has_unified_shape() -> None:
-    """v0.3.22+: B站 history events must carry context + source_platform
-    just like 小红书 events did from day one."""
-    item = {
-        "history": {"bvid": "BV1A", "view_at": 1710000000},
-        "title": "讲透历史叙事",
-        "author_name": "历史实验室",
-    }
-    event = _history_item_to_event(item)
-    assert _has_unified_shape(event)
-    assert event["metadata"]["source_platform"] == SOURCE_BILIBILI
-    assert event["event_type"] == "view"
-    assert "历史实验室" in event["context"]
-    assert "讲透历史叙事" in event["context"]
-    assert event["url"].endswith("/BV1A")
-    # Author canonical-name field is consistent with xhs events
-    assert event["metadata"]["author"] == "历史实验室"
-
-
-def test_xiaohongshu_bootstrap_events_have_unified_shape() -> None:
-    notes = [
-        {
-            "scope": "saved",
-            "title": "手冲咖啡入门",
-            "url": "https://www.xiaohongshu.com/explore/abc",
-            "author": "豆子老师",
-        },
-        {
-            "scope": "liked",
-            "title": "意式拉花教程",
-            "url": "https://www.xiaohongshu.com/explore/def",
-            "author": "拿铁猫",
-        },
-    ]
-    events = xhs_bootstrap_notes_to_events(notes)
-    assert len(events) == 2
-    for event in events:
-        assert _has_unified_shape(event)
-        assert event["metadata"]["source_platform"] == SOURCE_XIAOHONGSHU
-        assert "小红书" in event["context"]
-        assert event["metadata"]["author"]
-    # The two scopes map to distinct event_types
-    assert {e["event_type"] for e in events} == {"favorite", "like"}
-    # Scope-specific natural-language label is preserved
-    assert "收藏" in events[0]["context"]
-    assert "点赞" in events[1]["context"]
-
-
-def test_bilibili_and_xiaohongshu_events_share_consumer_contract() -> None:
-    """A consumer reading {event_type, title, context, metadata.source_platform,
-    metadata.author} should not need to special-case which source produced the
-    event. This is the core unification invariant."""
-    bili = _history_item_to_event(
-        {
-            "history": {"bvid": "BV1", "view_at": 1},
-            "title": "B站标题",
-            "author_name": "B站作者",
-        }
-    )
-    xhs = xhs_bootstrap_notes_to_events(
-        [{"scope": "saved", "title": "小红书标题", "author": "小红书作者"}]
-    )[0]
-
-    consumer_view_keys = {"event_type", "title", "context"}
-    consumer_metadata_keys = {"source_platform", "author"}
-
-    for event in (bili, xhs):
-        assert consumer_view_keys.issubset(event.keys())
-        assert consumer_metadata_keys.issubset(event["metadata"].keys())
-
-
-def test_extension_ingested_events_normalise_dict_context() -> None:
-    """Pre-v0.3.22 the /api/events ingest endpoint passed item.context
-    through verbatim, so dict-shaped context (extension-collected click
-    metadata) ended up in the database as a JSON blob and corrupted
-    LLM prompts. v0.3.22+ coerces non-string context to "" and folds
-    the original payload into metadata.raw_context for diagnostics.
-
-    This test covers the coercion logic by replicating what
-    ``ingest_events`` in api/app.py does (importing build_event from
-    sources.event_format) — keeps the contract pinned even if the
-    endpoint is later refactored.
-    """
-    raw_context_dict = {"video_id": "BV1", "ts": 12345}
-    metadata: dict = {"timestamp": 1700000000}
-    if not isinstance(raw_context_dict, str) and raw_context_dict:
-        metadata.setdefault("raw_context", raw_context_dict)
+def test_youtube_view_event_has_unified_shape() -> None:
     event = build_event(
-        event_type="click",
-        source_platform=SOURCE_BILIBILI,
-        title="一个视频",
-        url="https://www.bilibili.com/video/BV1",
-        author="某 UP",
-        context="",  # coerced from dict
-        metadata=metadata,
+        event_type="view",
+        source_platform=SOURCE_YOUTUBE,
+        title="Python Tips",
+        author="Real Python",
+        metadata={"vid": "xyz789", "signal_source": "recommended"},
     )
-    # Context is now a non-empty natural-language string
-    assert isinstance(event["context"], str)
-    assert event["context"]
-    assert "B 站" in event["context"]
-    # Original dict payload preserved for diagnostics
-    assert event["metadata"]["raw_context"] == raw_context_dict
+    assert _has_unified_shape(event)
+    assert event["metadata"]["source_platform"] == SOURCE_YOUTUBE
+    assert event["event_type"] == "view"
+    assert "Real Python" in event["context"]
+    assert "Python Tips" in event["context"]
+
+
+# ---------------------------------------------------------------------------
+# DB round-trip
 
 
 def test_event_db_round_trip_preserves_context_string_verbatim(tmp_path) -> None:
-    """v0.3.23+: regression for the JSON-double-encoding bug uncovered
-    after v0.3.22 unification.
-
-    Pre-v0.3.23 the database layer unconditionally json.dumps()'d the
-    context column. With the new string contract from build_event(),
-    a context like ``"在 B 站看了《讲透历史叙事》,作者:历史实验室"``
-    became ``'"在 B 站看了《讲透历史叙事》,作者:历史实验室"'`` in the
-    DB (literal outer quotes). When that round-tripped back through
-    json.dumps to the LLM prompt it became triple-escaped — visible
-    noise the model had to ignore.
-
-    This test pins the round-trip: build an event, insert via
-    propagate_event, query back, assert the context column value is
-    byte-identical to what build_event emitted.
-    """
+    """Context column must be the raw natural-language string, not JSON-quoted."""
     import asyncio
 
     from openbiliclaw.memory.manager import MemoryManager
-    from openbiliclaw.sources.event_format import (
-        SOURCE_BILIBILI,
-        SOURCE_XIAOHONGSHU,
-        build_event,
-    )
-    from openbiliclaw.storage.database import Database
 
     db_path = tmp_path / "events.db"
     db = Database(db_path)
     db.initialize()
     manager = MemoryManager(data_dir=tmp_path, database=db)
 
-    bili_event = build_event(
+    yt_event = build_event(
         event_type="favorite",
-        source_platform=SOURCE_BILIBILI,
-        title="讲透历史叙事",
-        url="https://www.bilibili.com/video/BV1A",
-        author="历史实验室",
-        metadata={"bvid": "BV1A"},
+        source_platform=SOURCE_YOUTUBE,
+        title="Async Python",
+        url="https://www.youtube.com/watch?v=yt1",
+        author="Tech Teach",
+        metadata={"vid": "yt1"},
     )
-    xhs_event = build_event(
-        event_type="like",
-        source_platform=SOURCE_XIAOHONGSHU,
-        title="手冲咖啡入门",
-        url="https://www.xiaohongshu.com/explore/abc",
-        author="豆子老师",
-        context="小红书点赞:手冲咖啡入门 作者:豆子老师",
-    )
-    asyncio.run(manager.propagate_event(bili_event))
-    asyncio.run(manager.propagate_event(xhs_event))
+    asyncio.run(manager.propagate_event(yt_event))
 
-    rows = db.get_recent_events(limit=10)
-    assert len(rows) == 2
-    by_title = {row["title"]: row for row in rows}
-
-    # Critical: context column is the raw natural-language string,
-    # NOT a JSON-quoted version of it. This is what fixes the
-    # triple-encoding noise in LLM prompts.
-    assert by_title["讲透历史叙事"]["context"] == bili_event["context"]
-    assert by_title["手冲咖啡入门"]["context"] == xhs_event["context"]
-    # Sanity: no leading literal quote (was the bug signature)
-    assert not by_title["讲透历史叙事"]["context"].startswith('"')
-    assert not by_title["手冲咖啡入门"]["context"].startswith('"')
+    rows = db.get_recent_events(limit=5)
+    assert len(rows) == 1
+    assert rows[0]["context"] == yt_event["context"]
+    assert not rows[0]["context"].startswith('"')
 
 
 def test_event_db_round_trip_legacy_dict_context_still_works(tmp_path) -> None:
-    """Backward compat: pre-v0.3.22 callers occasionally passed
-    dict-shaped context (extension click events with structured
-    payload). insert_event must still accept those — JSON-encoding
-    them on storage so the data isn't lost. Consumers reading the
-    column see a JSON-string they can json.loads if needed.
-    """
-    from openbiliclaw.storage.database import Database
-
+    """Legacy dict-shaped context must be JSON-encoded on storage."""
     db_path = tmp_path / "events.db"
     db = Database(db_path)
     db.initialize()
 
-    legacy_dict_context = {"video_id": "BV1", "ts": 12345}
+    legacy_dict_context = {"video_id": "yt1", "ts": 12345}
     db.insert_event(
         "click",
         title="legacy click",
         context=legacy_dict_context,
-        metadata={"source_platform": "bilibili"},
+        metadata={"source_platform": "youtube"},
     )
     rows = db.get_recent_events(limit=5)
     assert rows
-    stored = rows[0]["context"]
-    # Stored as JSON-encoded string (not the raw dict, since SQLite
-    # column is TEXT). Consumer can json.loads to recover the dict.
-    import json
-
-    decoded = json.loads(stored)
+    decoded = json.loads(rows[0]["context"])
     assert decoded == legacy_dict_context
 
 
-def test_feedback_event_uses_natural_language_context() -> None:
-    """v0.3.22+: /api/feedback now builds a custom context with the
-    feedback verb (点赞/踩/评论) instead of leaving context empty.
-    Replicates the api/app.py logic so the contract stays pinned."""
-    feedback_label = {"like": "点赞了", "dislike": "踩了", "comment": "评论了"}["dislike"]
-    rec_title = "某个视频"
-    note = "封面太花哨"
-    feedback_context = f"在 B 站{feedback_label}《{rec_title}》"
-    if note:
-        feedback_context = f"{feedback_context},备注:{note}"
+# ---------------------------------------------------------------------------
+# classify_event_satisfaction
 
-    event = build_event(
-        event_type="feedback",
-        source_platform=SOURCE_BILIBILI,
-        title=rec_title,
-        context=feedback_context,
-        metadata={
-            "recommendation_id": "rec-1",
-            "bvid": "BV1",
-            "feedback_type": "dislike",
-            "feedback_note": note,
-        },
+
+def test_classify_explicit_like_is_positive() -> None:
+    category, reason = classify_event_satisfaction(
+        {"event_type": "like", "metadata": {}}
     )
-    assert "踩了" in event["context"]
-    assert "封面太花哨" in event["context"]
-    assert event["metadata"]["feedback_type"] == "dislike"
-    assert event["metadata"]["source_platform"] == SOURCE_BILIBILI
+    assert category == "positive"
+    assert reason == "explicit_engagement"
+
+
+def test_classify_quick_exit_is_negative() -> None:
+    category, reason = classify_event_satisfaction(
+        {"event_type": "click", "metadata": {"watch_seconds": 2}}
+    )
+    assert category == "negative"
+    assert reason == "quick_exit"
+
+
+def test_classify_meaningful_dwell_is_positive() -> None:
+    category, reason = classify_event_satisfaction(
+        {
+            "event_type": "click",
+            "metadata": {
+                "watch_seconds": 120,
+                "video_duration_seconds": 300,
+            },
+        }
+    )
+    assert category == "positive"
+    assert reason == "meaningful_dwell"

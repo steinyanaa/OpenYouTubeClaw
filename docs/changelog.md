@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0-dev: YouTube-only hard fork (2026-05-21)
+
+- Deleted all Bilibili / XHS / Douyin backend source code (`sources/bilibili/`, `sources/xhs_tasks.py`, `sources/dy_tasks.py`, `bilibili/`, discovery strategies, CLI commands, API routes)
+- Deleted all non-YouTube extension code (`dy-task-dispatcher.ts`, `xhs-task-dispatcher.ts`, `bilibili.ts`, `douyin.ts`, `xiaohongshu.ts`, `xhs/`, `dy/`, `cookie-sync.ts`, platform adapters)
+- Updated architecture docs, spec, and all module docs to be YouTube-only
+- 77 tests skipped (platform-removed), 302 passed; extension: 101 passed
+
 ## v0.3.87: YouTube-only runtime hardening (2026-05-20)
 
 - Added a `product_mode = "youtube_only"` config guard that force-disables legacy Bilibili/XHS/Douyin source switches and filters scheduler shares to YouTube at config load/update time.

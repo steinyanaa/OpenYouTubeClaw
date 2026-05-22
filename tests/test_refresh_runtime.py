@@ -268,8 +268,6 @@ _LOOP_BODY_ATTRS = [
     ("_loop_refresh", ("_on_profile_ready_if_first_time", "refresh_if_needed")),
     ("_loop_pool_precompute", ("_drain_pool_precompute_backlog",)),
     ("_loop_soul_pipeline", ("_tick_soul_pipeline",)),
-    ("_loop_xhs_producer", ("_tick_xhs_producer",)),
-    ("_loop_douyin_producer", ("_tick_douyin_producer",)),
     (
         "_loop_proactive_push",
         (
@@ -1460,25 +1458,9 @@ async def test_douyin_producer_runs_when_douyin_under_quota() -> None:
     assert producer.calls == [30]
 
 
+@pytest.mark.skip(reason="Douyin producer removed in YouTube-only fork")
 async def test_douyin_producer_skips_when_douyin_at_quota() -> None:
-    producer = _FakeDouyinProducer()
-    controller = ContinuousRefreshController(
-        memory_manager=_FakeMemoryManager(),
-        database=_FakeDatabase(
-            [],
-            pool_count=600,
-            source_counts={"bilibili": 480, "xiaohongshu": 60, "douyin": 60},
-        ),
-        soul_engine=_FakeSoulEngine(),
-        discovery_engine=_FakeDiscoveryEngine(),
-        recommendation_engine=_FakeRecommendationEngine(),
-        pool_target_count=600,
-        douyin_producer=producer,
-    )
-
-    await controller._tick_douyin_producer()
-
-    assert producer.calls == []
+    pass
 
 
 def test_pool_cap_trim_receives_xhs_family_quota() -> None:
@@ -1780,7 +1762,7 @@ async def test_run_forever_cancels_child_loops_on_shutdown() -> None:
         check_interval_seconds=3600,
     )
 
-    started = {name: asyncio.Event() for name in ("refresh", "soul", "xhs", "douyin", "push")}
+    started = {name: asyncio.Event() for name in ("refresh", "pool", "soul", "push")}
     cancelled = {name: asyncio.Event() for name in started}
     spawned_tasks: list[asyncio.Task[None]] = []
 
@@ -1798,9 +1780,8 @@ async def test_run_forever_cancels_child_loops_on_shutdown() -> None:
         return loop
 
     controller._loop_refresh = make_loop("refresh")  # type: ignore[method-assign]
+    controller._loop_pool_precompute = make_loop("pool")  # type: ignore[method-assign]
     controller._loop_soul_pipeline = make_loop("soul")  # type: ignore[method-assign]
-    controller._loop_xhs_producer = make_loop("xhs")  # type: ignore[method-assign]
-    controller._loop_douyin_producer = make_loop("douyin")  # type: ignore[method-assign]
     controller._loop_proactive_push = make_loop("push")  # type: ignore[method-assign]
 
     task = asyncio.create_task(controller.run_forever())

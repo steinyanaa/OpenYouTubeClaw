@@ -137,14 +137,14 @@ OpenClaw integration 本身没有新增独立 `config.toml` 段落，直接复�
 
 - `[general]`
 - `[llm]`
-- `[bilibili]`
+- `[sources.youtube]`
 - `[scheduler]`
 - `[storage]`
 
 其中最直接影响 adapter 行为的项包括：
 
 - `[general].data_dir`
-- `[bilibili].cookie`
+- `[sources.youtube].enabled`
 - `[scheduler].pool_target_count`
 - `[scheduler].account_sync_interval_hours`
 - `[scheduler].pause_on_extension_disconnect`

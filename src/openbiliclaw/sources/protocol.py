@@ -1,4 +1,4 @@
-"""Core abstractions for multi-source content discovery."""
+"""Core abstractions for YouTube content discovery."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ class SourceRecipe:
 
     Attributes:
         id: Unique identifier (UUID string).
-        source_type: Platform key, e.g. ``"bilibili"``, ``"xiaohongshu"``, ``"web"``.
-        name: Human-readable label, e.g. "B站-搜索" or "小红书-机械键盘".
+        source_type: Platform key — always ``"youtube"``.
+        name: Human-readable label, e.g. "YouTube-搜索" or "YouTube-推荐".
         strategy: Discovery strategy within the adapter, e.g. ``"search"``,
             ``"trending"``, ``"feed"``, ``"explore"``, ``"related_chain"``.
         config: Adapter-specific parameters (search query, feed URL, etc.).
@@ -49,14 +49,13 @@ class SourceRecipe:
 class SourceAdapter(Protocol):
     """Unified interface for content source adapters.
 
-    Every adapter (Bilibili, Xiaohongshu, generic web, …) implements this
-    protocol.  The discovery engine and scheduler interact exclusively
-    through this interface — everything above is source-agnostic.
+    The YouTube source adapter implements this protocol.  The discovery
+    engine and scheduler interact exclusively through this interface.
     """
 
     @property
     def source_type(self) -> str:
-        """Platform identifier, e.g. ``"bilibili"``."""
+        """Platform identifier — always ``"youtube"``."""
         ...
 
     async def fetch(

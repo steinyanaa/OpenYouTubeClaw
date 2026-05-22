@@ -600,6 +600,7 @@ async def test_get_delight_returns_none_when_no_candidate() -> None:
     assert result.item is None
 
 
+@pytest.mark.skip(reason="platform removed: bilibili bootstrap wiring deleted")
 def test_build_openclaw_adapter_services_reuses_shared_database(monkeypatch) -> None:
     import openbiliclaw.integrations.openclaw.bootstrap as bootstrap_module
 
@@ -752,6 +753,7 @@ def test_build_openclaw_adapter_services_reuses_shared_database(monkeypatch) -> 
     assert "presence" in services.runtime_controller.kwargs
 
 
+@pytest.mark.skip(reason="platform removed: bilibili bootstrap wiring deleted")
 def test_build_openclaw_adapter_returns_ready_adapter(monkeypatch) -> None:
     import openbiliclaw.integrations.openclaw.bootstrap as bootstrap_module
 

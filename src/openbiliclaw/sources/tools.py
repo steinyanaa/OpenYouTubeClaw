@@ -23,8 +23,8 @@ SOURCE_TOOLS: list[dict[str, Any]] = [
             "当用户说想关注某个平台的某类内容时调用。"
         ),
         "parameters": {
-            "source_type": "平台类型，如 xiaohongshu / web / v2ex / zhihu",
-            "name": "人类可读的订阅名，如 '小红书-机械键盘'",
+            "source_type": "平台类型，固定为 youtube",
+            "name": "人类可读的订阅名，如 'YouTube-机械键盘'",
             "strategy": "search 或 feed",
             "query": "搜索关键词（strategy=search 时必填）",
             "url": "直接 URL（strategy=feed 时必填）",

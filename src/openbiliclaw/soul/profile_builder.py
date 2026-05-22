@@ -284,7 +284,7 @@ class ProfileBuilder:
         # cross-platform behaviour readable instead of forcing the model
         # to reverse-engineer it from titles + author lists.
         from openbiliclaw.sources.event_format import (
-            SOURCE_BILIBILI,
+            SOURCE_YOUTUBE,
             format_event_context,
         )
 
@@ -297,7 +297,7 @@ class ProfileBuilder:
             source_platform = (
                 str(item.get("source_platform", "")).strip()
                 or str(metadata.get("source_platform", "")).strip()
-                or SOURCE_BILIBILI  # legacy raw-B站-history default
+                or SOURCE_YOUTUBE  # legacy items fall back to youtube
             )
             event_type = (
                 str(item.get("event_type", "")).strip()

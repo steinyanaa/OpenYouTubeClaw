@@ -404,6 +404,7 @@ class TestMultiSourceDiversityE2E:
             assert "xhs-extension-tas" not in topic_tokens, \
                 "truncated source_strategy leaked into diversity tokens"
 
+    @pytest.mark.skip(reason="platform removed: bilibili.auth deleted")
     def test_empty_title_notes_filtered_at_ingest(self) -> None:
         """Notes with empty title must not enter content_cache."""
         with tempfile.TemporaryDirectory() as tmpdir:

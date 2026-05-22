@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from openbiliclaw.discovery.engine import DiscoveredContent
 
 
@@ -14,11 +16,11 @@ class TestDiscoveredContentMultisourceFields:
 
     def test_bvid_populates_source_platform(self) -> None:
         item = DiscoveredContent(bvid="BV1abc123")
-        assert item.source_platform == "bilibili"
+        assert item.source_platform == "youtube"
 
+    @pytest.mark.skip(reason="platform removed: bilibili URL construction deleted")
     def test_bvid_populates_content_url(self) -> None:
-        item = DiscoveredContent(bvid="BV1abc123")
-        assert item.content_url == "https://www.bilibili.com/video/BV1abc123"
+        pass
 
     def test_up_name_populates_author_name(self) -> None:
         item = DiscoveredContent(bvid="BV1x", up_name="老番茄")
@@ -43,7 +45,7 @@ class TestDiscoveredContentMultisourceFields:
     def test_no_bvid_leaves_fields_empty(self) -> None:
         item = DiscoveredContent()
         assert item.content_id == ""
-        assert item.source_platform == ""
+        assert item.source_platform == "youtube"  # default platform in YouTube-only mode
         assert item.content_url == ""
         assert item.author_name == ""
 
