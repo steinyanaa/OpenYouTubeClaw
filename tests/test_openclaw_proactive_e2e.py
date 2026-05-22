@@ -103,8 +103,8 @@ class _FakeDatabase:
             "delight_score": 0.94,
             "delight_hook": "跨域惊喜",
             "cover_url": "https://example.com/delight.jpg",
-            "content_url": "https://www.bilibili.com/video/BV1DELIGHT42",
-            "source_platform": "bilibili",
+            "content_url": "https://www.youtube.com/watch?v=BV1DELIGHT42",
+            "source_platform": "youtube",
         }
         self.marked_delight_bvids: list[str] = []
 
@@ -265,7 +265,7 @@ async def test_openclaw_listen_streams_delight_and_acknowledges_delivery(
     assert event["type"] == "delight.candidate"
     assert event["bvid"] == "BV1DELIGHT42"
     assert event["delight_hook"] == "跨域惊喜"
-    assert event["source_platform"] == "bilibili"
+    assert event["source_platform"] == "youtube"
     assert memory_manager.runtime_state["last_delight_notification_at"] != ""
 
 

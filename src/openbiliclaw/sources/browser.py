@@ -1,17 +1,9 @@
-"""Generic browser automation layer for multi-source content fetching.
+"""Browser automation layer for YouTube content fetching via Playwright CDP.
 
-Two interchangeable backends:
-
-``cdp_url`` set (recommended)
-    Connect to a pre-launched Chrome via Playwright ``connect_over_cdp``.
-    The user opens Chrome once with ``--remote-debugging-port=9222``,
-    logs into the target platforms, and leaves it running. Every adapter
-    call then reuses that logged-in session — which is the only way
-    sources like Xiaohongshu actually work without getting rate-limited.
-
-``cdp_url`` empty (fallback)
-    Wrap the existing agent-browser CLI. No login state — fine for
-    simple anonymous pages, blocked on most real sources.
+Connect to a pre-launched Chrome via Playwright ``connect_over_cdp``.
+The user opens Chrome once with ``--remote-debugging-port=9222``,
+logs in to YouTube, and leaves it running. Every adapter call reuses
+that authenticated session.
 """
 
 from __future__ import annotations
@@ -78,79 +70,45 @@ def _async_playwright() -> Any:
 
 
 class BrowserManager:
-    """Manages browser sessions for non-Bilibili content sources.
+    """Manages Chrome CDP sessions for YouTube content fetching.
 
     Args:
-        executable: agent-browser executable path (fallback backend only).
-        headed: whether to launch agent-browser headed (fallback backend only).
         cdp_url: CDP WebSocket/HTTP endpoint of a pre-launched Chrome.
-            Example: ``http://127.0.0.1:9222``. When set, this backend
-            takes precedence over agent-browser.
+            Example: ``http://127.0.0.1:9222``.
     """
 
     def __init__(
         self,
-        executable: str = "",
-        headed: bool = False,
         cdp_url: str = "",
+        **_kwargs: Any,  # absorb legacy executable/headed kwargs
     ) -> None:
         self._cdp_url = cdp_url.strip()
 
-        if not self._cdp_url:
-            from openbiliclaw.bilibili.browser import BilibiliBrowser
-
-            self._browser: Any = BilibiliBrowser(
-                executable=executable,
-                headed=headed,
-                cookie="",
-            )
-        else:
-            self._browser = None
-
     @property
     def is_available(self) -> bool:
-        """Whether the chosen backend can be invoked.
+        """Whether a CDP endpoint is configured.
 
-        For the CDP backend, availability is determined lazily at call time
-        (connection may still fail if the Chrome instance is not running);
-        for the agent-browser backend we delegate to its own check.
+        Availability is determined lazily at call time — the Chrome
+        instance may not be running even if a URL is set.
         """
-        if self._cdp_url:
-            return True
-        return bool(self._browser and self._browser.is_available)
+        return bool(self._cdp_url)
 
     @property
     def backend(self) -> str:
-        """Backend identifier: ``"cdp"`` or ``"agent-browser"``."""
-        return "cdp" if self._cdp_url else "agent-browser"
+        """Backend identifier — always ``"cdp"``."""
+        return "cdp"
 
     async def get_page_snapshot(self, url: str) -> PageSnapshot:
-        """Navigate to ``url`` and return text + anchors.
-
-        The CDP backend captures both in one JS evaluate; the agent-browser
-        fallback only exposes text, so ``anchors`` is returned empty.
-        """
-        if self._cdp_url:
-            return await self._get_page_snapshot_cdp(url)
-        assert self._browser is not None
-        text: str = await self._browser.get_page_content(url)
-        return PageSnapshot(text=text, anchors=[])
+        """Navigate to ``url`` and return text + anchors."""
+        return await self._get_page_snapshot_cdp(url)
 
     async def get_page_text(self, url: str) -> str:
-        """Navigate to ``url`` and return visible page text only.
-
-        Thin wrapper over :meth:`get_page_snapshot` for callers that
-        don't need anchor data.
-        """
+        """Navigate to ``url`` and return visible page text only."""
         snapshot = await self.get_page_snapshot(url)
         return snapshot.text
 
     async def close(self) -> None:
-        """Close the fallback backend; CDP backend detaches per-call."""
-        if self._cdp_url:
-            return
-        if self._browser is not None:
-            await self._browser.close()
+        """No-op — CDP backend detaches per-call."""
 
     async def _get_page_snapshot_cdp(self, url: str) -> PageSnapshot:
         """Connect to the running Chrome via CDP, navigate, return snapshot."""

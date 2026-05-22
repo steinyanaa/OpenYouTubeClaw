@@ -24,7 +24,6 @@ logger = logging.getLogger(__name__)
 _MAX_DISCOVERY_BACKFILL_PER_REFRESH = 60
 _DEFAULT_PLATFORM_SOURCE_SHARES: dict[str, int] = {"youtube": 1}
 _PLATFORM_SOURCE_ORDER = ("youtube",)
-_BILIBILI_DISCOVERY_SOURCES: tuple[str, ...] = ()
 _YOUTUBE_DISCOVERY_SOURCES = ("yt_search", "yt_trending", "yt_channel")
 
 
@@ -173,8 +172,6 @@ class ContinuousRefreshController:
     discovery_engine: SupportsDiscoveryEngine
     recommendation_engine: SupportsRecommendationEngine
     event_hub: Any | None = None
-    xhs_producer: Any | None = None
-    douyin_producer: Any | None = None
     scheduler_config: Any = field(default_factory=SchedulerConfig)
     presence: PresenceTracker = field(default_factory=PresenceTracker)
     signal_event_threshold: int = 6
@@ -683,8 +680,6 @@ class ContinuousRefreshController:
             ┌─ _loop_refresh()           60s   LLM-heavy, may take minutes
             ├─ _loop_pool_precompute()   60s   v0.3.60+ — drain pool_expression
             ├─ _loop_soul_pipeline()     60s   profile updates, speculator
-            ├─ _loop_xhs_producer()      60s   xhs keyword generation
-            ├─ _loop_douyin_producer()   60s   Douyin discovery when under quota
             └─ _loop_proactive_push()    60s   delight + interest probe
         """
         if self._llm_work_allowed():
@@ -695,8 +690,6 @@ class ContinuousRefreshController:
             asyncio.create_task(self._loop_refresh()),
             asyncio.create_task(self._loop_pool_precompute()),
             asyncio.create_task(self._loop_soul_pipeline()),
-            asyncio.create_task(self._loop_xhs_producer()),
-            asyncio.create_task(self._loop_douyin_producer()),
             asyncio.create_task(self._loop_proactive_push()),
         ]
         try:
@@ -832,26 +825,6 @@ class ContinuousRefreshController:
                 await self._tick_soul_pipeline()
             await asyncio.sleep(self.check_interval_seconds)
 
-    async def _loop_xhs_producer(self) -> None:
-        """XHS keyword production — Soul-driven search task generation."""
-        while True:
-            if not self._llm_work_allowed():
-                await asyncio.sleep(self.check_interval_seconds)
-                continue
-            with suppress(Exception):
-                await self._tick_xhs_producer()
-            await asyncio.sleep(self.check_interval_seconds)
-
-    async def _loop_douyin_producer(self) -> None:
-        """Douyin production — plugin/direct discovery when Douyin is below quota."""
-        while True:
-            if not self._llm_work_allowed():
-                await asyncio.sleep(self.check_interval_seconds)
-                continue
-            with suppress(Exception):
-                await self._tick_douyin_producer()
-            await asyncio.sleep(self.check_interval_seconds)
-
     async def _loop_proactive_push(self) -> None:
         """Delight + interest probe push — lightweight, never blocks.
 
@@ -900,42 +873,6 @@ class ContinuousRefreshController:
                         }
                     )
             await asyncio.sleep(self.proactive_push_interval_seconds)
-
-    async def _tick_xhs_producer(self) -> None:
-        """Invoke the xhs search task producer if one is configured."""
-        producer = self.xhs_producer
-        if producer is None:
-            return
-        deficit = self._source_deficit("xiaohongshu")
-        if deficit <= 0:
-            return
-        limit = max(1, min(deficit, self.discovery_limit))
-        produce_fn = getattr(producer, "produce_if_due", None)
-        if not callable(produce_fn):
-            return
-        if _call_accepts_limit(produce_fn):
-            await produce_fn(limit=limit)
-        else:
-            await produce_fn()
-
-    async def _tick_douyin_producer(self) -> None:
-        """Invoke the Douyin discovery producer if Douyin is under quota."""
-        producer = self.douyin_producer
-        if producer is None:
-            return
-        if not self._is_initialized():
-            return
-        deficit = self._source_deficit("douyin")
-        if deficit <= 0:
-            return
-        produce_fn = getattr(producer, "produce_if_due", None)
-        if not callable(produce_fn):
-            return
-        limit = max(1, min(deficit, self.discovery_limit))
-        if _call_accepts_limit(produce_fn):
-            await produce_fn(limit=limit)
-        else:
-            await produce_fn()
 
     async def _tick_soul_pipeline(self) -> None:
         """Invoke ProfileUpdatePipeline.tick() if the soul engine exposes one.
@@ -1323,7 +1260,7 @@ class ContinuousRefreshController:
                 "delight_hook": candidate.get("delight_hook", ""),
                 "cover_url": candidate.get("cover_url", ""),
                 "content_url": candidate.get("content_url", ""),
-                "source_platform": candidate.get("source_platform", "bilibili"),
+                "source_platform": candidate.get("source_platform", "youtube"),
             }
         )
 
@@ -1434,11 +1371,7 @@ class ContinuousRefreshController:
             )
             if deficit <= 0:
                 continue
-            if source == "bilibili":
-                # Bilibili is a platform quota now, but its implementation
-                # still fans out through four established strategy names.
-                plan.append((list(_BILIBILI_DISCOVERY_SOURCES), deficit))
-            elif source == "youtube":
+            if source == "youtube":
                 plan.append((list(_YOUTUBE_DISCOVERY_SOURCES), deficit))
         return plan
 
@@ -1466,10 +1399,6 @@ class ContinuousRefreshController:
         return max(0, target - current)
 
     def _platform_source_count(self, source_counts: dict[str, int], source_family: str) -> int:
-        if source_family == "bilibili":
-            if "bilibili" in source_counts:
-                return int(source_counts.get("bilibili", 0))
-            return sum(int(source_counts.get(source, 0)) for source in _BILIBILI_DISCOVERY_SOURCES)
         return int(source_counts.get(source_family, 0))
 
     def _warn_on_stranded_source_shares(self) -> None:
@@ -1492,15 +1421,11 @@ class ContinuousRefreshController:
                 _YOUTUBE_DISCOVERY_SOURCES
             ):
                 continue
-            if source == "xiaohongshu" and self.xhs_producer is None:
-                stranded.append("xiaohongshu")
-            elif source == "douyin" and self.douyin_producer is None:
-                stranded.append("douyin")
-            elif source == "youtube" and not self._has_registered_discovery_sources(
+            if source == "youtube" and not self._has_registered_discovery_sources(
                 _YOUTUBE_DISCOVERY_SOURCES
             ):
                 stranded.append("youtube")
-            elif source not in {"bilibili", "xiaohongshu", "douyin", "youtube"}:
+            elif source != "youtube":
                 # Unknown source family with an explicit share.
                 stranded.append(source)
         if stranded:
@@ -1582,7 +1507,7 @@ class ContinuousRefreshController:
         """Split a grouped Bilibili refresh budget across its strategies."""
         if not pool_below_target or len(strategies) <= 1:
             return None
-        if not all(strategy in _BILIBILI_DISCOVERY_SOURCES for strategy in strategies):
+        if not all(strategy in _YOUTUBE_DISCOVERY_SOURCES for strategy in strategies):
             return None
         total_gap = max(1, self.pool_target_count - current_pool_count)
         shared_budget = min(

@@ -22,19 +22,19 @@
 | 候选排序统一 | ✅ | freshly discovered 与 cache backfill 现在共享同一套 tier / relevance / recency 排序口径 |
 | 9.1 反馈处理 | ✅ | CLI、本地 API 与插件 popup 已统一写回推荐反馈与 `feedback` 事件 |
 | 9.2 画像更新 | ✅ | 反馈累计到阈值后会自动触发偏好层重分析与画像重建 |
-| 体验优化：动态“老B友”语气 | ✅ | 推荐文案不再固定套模板，而是根据画像、偏好和近期反馈动态调整信息密度、温度、梗感与直给程度 |
+| 体验优化：动态个性化语气 | ✅ | 推荐文案不再固定套模板，而是根据画像、偏好和近期反馈动态调整信息密度、温度、梗感与直给程度 |
 | M106 候选池即时换一批 | ✅ | `content_cache` 现已作为 discovery pool 使用，popup 可秒级从池子里换一批新推荐 |
 | M107 候选池容量与状态展示 | ✅ | runtime 会按 `pool_target_count` 持续补货，popup 会展示可换数量、最近补货数量和补货方向。`pool_target_count` 同时作为硬上限：pool ≥ 目标时 refresh（含 force_refresh）直接返回 `pool_at_cap` 不再 discover，溢出部分会按分数 / 时间 / explore 优先顺序降为 `suppressed` |
 | M117 同批多样性约束 | ✅ | 同一批推荐不再只按分数直取前 N，而会对重复 topic 做限流，让一批里更容易同时出现不同方向 |
 | M118 topic_key 多样性强化 | ✅ | discovery pool 现在会持久化 `topic_key`，推荐层会优先按 `topic_key` 分桶再回填，减少同一 seed chain 或同类 query 连续刷屏 |
-| M119 风格多样性与快速文案增强 | ✅ | `reshuffle` 现在会同时约束 `topic_key + style_key`，并把快速 fallback 文案润色成更自然的老B友短句 |
+| M119 风格多样性与快速文案增强 | ✅ | `reshuffle` 现在会同时约束 `topic_key + style_key`，并把快速 fallback 文案润色成更自然的个性化短句 |
 | M120 来源上限与硬配比 | ✅ | `reshuffle` 现在会对 `topic_key + style_key + source` 同时加硬上限，小批次优先保留不同来源，10 条一批时单一来源最多 3 条 |
 | M121 推荐自动续页 | ✅ | popup 滚到底时现在会调用 `append` 从 discovery pool 再续 10 条，不再只能整组“换一批” |
 | M122 来源优先补齐 | ✅ | 推荐选片时会先补齐不同 `source`，再限制重复 `style`，避免 `explore` 把 `search/trending` 挤出同一批结果 |
 | M123 上游来源配额补货 | ✅ | discovery pool 低于目标值时，runtime 会先补足来源缺口，减少推荐层长期面对“explore 过满、trending 过少”的偏池子 |
 | M124 generate 路径丰富度修正 | ✅ | `generate_recommendations()` 现在也会先对缓存候选做来源均衡，再分阶段放宽 `topic/style/source` 约束，避免高分 `related_chain` 长时间吃掉整批名额 |
 | M125 pool 预生成推荐文案 | ✅ | discovery pool 现在会异步批量预生成 `expression/topic_label`，`reshuffle/append` 只消费预生成结果，缺失时返回空而不是写统一兜底 |
-| M126 源无关内容分类 | ✅ | `classify_pool_backlog()` 在 `precompute_pool_copy` 前自动为未分类内容（XHS 等）补上 `style_key` / `topic_group` / `relevance_score`。COALESCE 保护已分类字段不被重复入库覆盖。`_diversity_tokens` 不再 fallback `source_strategy`——推荐层只看内容特征，来源完全透明 |
+| M126 源无关内容分类 | ✅ | `classify_pool_backlog()` 在 `precompute_pool_copy` 前自动为未分类内容补上 `style_key` / `topic_group` / `relevance_score`。COALESCE 保护已分类字段不被重复入库覆盖。`_diversity_tokens` 不再 fallback `source_strategy`——推荐层只看内容特征，来源完全透明 |
 | M127 兴趣探针用户确认 | ✅ | WebSocket 推送 `interest.probe` → Chrome 通知 → popup 卡片（是 / 不是 / 多聊聊）→ `POST /api/interest-probes/respond` → speculator confirm/reject/chat。4h 去重冷却。推送从 `_run_refresh_plan` 移到 `run_forever` 主循环 |
 | M128 CLI delight + probe | ✅ | `openbiliclaw delight` 手动查看惊喜推荐候选；`openbiliclaw probe` 手动列出猜测方向并交互确认/拒绝 |
 | M129 惊喜候选自动预热与回填 | ✅ | delight 运行时统一使用共享阈值（默认 `0.70`，保守用户 `0.80`）；后台启动会自动补齐高分但缺 `reason/hook` 的候选，`suppressed` 高分库存也允许作为惊喜推荐入口 |
@@ -77,7 +77,7 @@ items = await engine.generate_recommendations(
 - 排序主键先看 `candidate_tier`，再看 `relevance_score`、`last_scored_at/discovered_at`、`view_count`
 - 生成结果后会写入 `recommendations` 表，避免下次重复选中
 - 每条推荐都会调用 `generate_expression()` 生成 `expression` 和 `topic_label`
-- 推荐表达会先从当前画像、偏好摘要、`disliked_topics` 和近期反馈推断 `ToneProfile`，再生成更贴近用户口味且避开长期雷点的“老B友”式文案
+- 推荐表达会先从当前画像、偏好摘要、`disliked_topics` 和近期反馈推断 `ToneProfile`，再生成更贴近用户口味且避开长期雷点的个性化文案
 - CLI 展示后会把对应推荐记录标记为 `presented = 1`
 - `feedback` 命令会把 `feedback_type` / `feedback_note` / `feedback_at` 写回推荐记录
 - 多样性回填会分阶段放宽 `style`、`source`、`topic` 约束，只有候选真的不足时才彻底兜底补满
@@ -105,7 +105,7 @@ items = await engine.reshuffle_recommendations(
 - 快路径现在不会现场调用 LLM，也不会再给整批卡片写同一个 fallback topic；只消费 pool 里已经预生成好的 `expression/topic_label`
 - 如果某条候选暂时还没预生成好推荐文案，这两个字段会保持为空，交给前端直接隐藏
 - 命中候选后会立即写入 `recommendations` 表，并把对应池子项标记为 `shown`
-- runtime 会把 discovery pool 持续补到 `pool_target_count` 附近，默认目标现在是 `600`（上限 `600`）；达到目标后停止 discover，等池子掉回目标以下再补货，保证 popup 连续“换一批”和自动续页时尽量随时有货，同时避免无谓的远端调用。补货和 trim 会按 `[scheduler.pool_source_shares]` 做平台级硬配比，默认 B 站 / 小红书 / 抖音 = 8 / 1 / 1（600 池子约 480 / 60 / 60），单个平台族超过配额时会被先压回目标内；少量补货时 discovery 会收缩 LLM 评估窗口，只评估可被当前平台缺口吸收的过采样候选
+- runtime 会把 discovery pool 持续补到 `pool_target_count` 附近，默认目标现在是 `600`（上限 `600`）；达到目标后停止 discover，等池子掉回目标以下再补货，保证 popup 连续”换一批”和自动续页时尽量随时有货，同时避免无谓的远端调用。补货和 trim 会按 `[scheduler.pool_source_shares]` 做来源级硬配比；单个来源族超过配额时会被先压回目标内；少量补货时 discovery 会收缩 LLM 评估窗口，只评估可被当前来源缺口吸收的过采样候选
 - runtime 补货在调用 discovery 前会构建候选池分布 snapshot，把当前来源缺口和饱和方向作为可选上下文传给兼容的 discovery strategy
 - pool-aware discovery 只改变上游补货时的 query 软指导和入池前软重排；`reshuffle` 的服务路径、候选过滤、文案 gating、推荐记录写入和多样性选择逻辑保持不变
 - refresh 结束后还会顺手压一轮 `explore` 的高风险相邻子簇，避免制造 / 工艺 / 材料、博弈 / 桌游 / 机制这类方向把剩余可换窗口挤成单一口味
@@ -363,7 +363,7 @@ report: PoolHealthReport = curator.check_pool_health()
 6. **三端走同一反馈语义**：CLI、API 和 popup 都只写入当前反馈状态，并同步追加 `feedback` 事件
 7. **先平衡候选，再放宽约束**：优先通过来源均衡和分阶段回填守住一批内容的丰富度，而不是靠最后一步无条件补满
 8. **反馈驱动学习延迟触发**：推荐反馈不会逐条立刻重写画像，而是累计到阈值后统一重分析，降低噪声
-9. **推荐语气跟着用户变**：表达风格不只看内容匹配度，还会根据画像和近期反馈动态调节“老B友”程度，尽量减少机械解释感
+9. **推荐语气跟着用户变**：表达风格不只看内容匹配度，还会根据画像和近期反馈动态调节个性化程度，尽量减少机械解释感
 10. **缓存候选不能退化成只看播放量**：一旦从 `content_cache` 回读候选，也必须恢复 `relevance_score`、`candidate_tier` 和时间字段，保持与实时发现同一排序标准
 11. **候选池先可展示，再做文案增强**：`discover` 入池时就要带 `relevance_reason`，popup “换一批”先秒级从池子里出片，`expression` 只是增强层，不再阻塞展示
 12. **同批推荐需要显式做多样性约束**：高分不是唯一目标，排序后仍要对重复 topic/tag 做软限流，避免一批里全是同一类内容

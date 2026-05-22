@@ -6,7 +6,7 @@
 - `[general].product_mode` defaults to `"youtube_only"`; this is the config-layer product guard for OpenYouTubeClaw.
 - `[sources.youtube]` is the only enabled platform source by default.
 - `[scheduler.pool_source_shares]` should contain only `youtube = 1` in public config.
-- `[sources.bilibili]`, `[sources.xiaohongshu]`, and `[sources.douyin]` remain parseable for legacy configs but default to `enabled = false` and are filtered out by runtime source policy.
+- `[sources.bilibili]`, `[sources.xiaohongshu]`, and `[sources.douyin]` are ignored at config load in `youtube_only` mode.
 - Public CLI examples should use `openyoutubeclaw`; the internal Python package remains `openbiliclaw` for this migration phase.
 
 # 配置参考
@@ -183,7 +183,7 @@ CPU 即可跑（~100-200ms/次），跨 Mac / Win / Linux 一致。
 
 运行时路由（v0.3.75+）：
 
-- `LLMService` 不再用 caller 第一段朴素判断模块，而是内置 caller bucket。例：`soul.*` → soul，`discovery.search/explore/trending/related.*`、`yt_search.*`、`sources.xhs.*` → discovery，`recommendation.delight_score`、`recommendation.evaluate_batch`、`discovery.evaluate*`、`eval.*` → evaluation，其他 `recommendation.*` → recommendation。
+- `LLMService` 不再用 caller 第一段朴素判断模块，而是内置 caller bucket。例：`soul.*` → soul，`discovery.search/explore/trending/related.*`、`yt_search.*` → discovery，`recommendation.delight_score`、`recommendation.evaluate_batch`、`discovery.evaluate*`、`eval.*` → evaluation，其他 `recommendation.*` → recommendation。
 - `provider` 非空时走 `LLMRegistry.complete_provider(provider, ...)` 精确调用该 provider，不走 fallback 链；该 provider 被 rate-limit 或返回错误时会直接报错，避免用户指定贵模型给画像却被静默改用默认便宜模型。
 - `model` 非空时作为单次调用的 `model=` 参数传给 provider，不会修改 provider 实例的默认模型；`provider` 留空但 `model` 非空时，使用当前 default provider + 该 per-call model。
 - `provider` 拼错或目标 provider 不是 chat-capable（例如 embedding-only Ollama）时，不会让保存配置失败；运行时会按模块 + provider 只 INFO 一次，然后降级到默认 provider 链。
@@ -212,36 +212,16 @@ model    = "deepseek-v4-flash"
 >   --module-override evaluation=deepseek:deepseek-v4-flash
 > ```
 
-### `[bilibili]`
-
-| 键 | 类型 | 默认值 | 说明 |
-|----|------|--------|------|
-| `auth_method` | string | `"cookie"` | 认证方式：`cookie` / `qrcode` / `none` |
-| `cookie` | string | `""` | 浏览器 Cookie（推荐通过 `auth login` 命令设置） |
-
-### `[bilibili.browser]`
-
-| 键 | 类型 | 默认值 | 说明 |
-|----|------|--------|------|
-| `executable` | string | `""` | agent-browser 路径（留空使用全局安装） |
-| `headed` | bool | `false` | 是否显示浏览器窗口（调试用） |
-
-> 运行时行为：
-> 如果 `bilibili.cookie` 留空，CLI 命令和本地 API 服务会自动回退到 `auth login` 保存的 `data/bilibili_cookie.json`。
-> 只有在你想显式覆盖本地登录态时，才需要把 cookie 直接写进 `config.toml`。
-
 ### `[sources.browser]`
 
-通用 Web / 自定义网页源使用的浏览器配置。与 `bilibili.browser` 独立 —— 后者控制 B 站登录 / 扫码用的 agent-browser CLI。
-
-> 当前小红书和抖音稳定链路都走 Chrome 插件任务，不依赖 `[sources.browser].cdp_url`。这里的 CDP 配置主要用于没有专用插件 / API adapter 的网页源。
+通用 Web / 自定义网页源使用的浏览器配置，用于没有专用插件 / API adapter 的网页源。
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
 | `cdp_url` | string | `""` | 预启动 Chrome 的 CDP 端点，例如 `"http://localhost:9222"`。设置后优先走 Playwright `connect_over_cdp` 复用你手动登录的会话；留空则回退到 agent-browser（无登录态） |
 | `headed` | bool | `false` | agent-browser 回退路径是否显示窗口 |
 
-> **仅在通用 Web / 自定义网页源需要登录态时使用 CDP。** 普通 B 站 / 小红书 / 抖音使用路径不需要配置这里。
+> **仅在通用 Web / 自定义网页源需要登录态时使用 CDP。**
 >
 > 启动步骤：
 > 1. 安装 Playwright：`pip install 'openbiliclaw[browser]'`
@@ -255,43 +235,6 @@ model    = "deepseek-v4-flash"
 > 4. 在 `config.toml` 里填 `cdp_url = "http://localhost:9222"`
 >
 > `127.0.0.1` 与 `localhost` 并非总是等价：macOS 上 Chrome 常只绑定 IPv6 `::1:9222`，而 Python urllib 默认走 IPv4。用 `localhost` 最稳妥（`getaddrinfo` 会同时尝试两边）。
-
-### `[sources.bilibili]`
-
-Bilibili discovery 的平台级开关。B 站账号登录 / Cookie 获取仍由 `[bilibili.auth]` 和 `[bilibili.browser]` 控制；本段只决定后台候选池是否继续调度 B 站 `search` / `related_chain` / `trending` / `explore` 策略。
-
-| 键 | 类型 | 默认值 | 说明 |
-|----|------|--------|------|
-| `enabled` | bool | `true` | 是否启用 Bilibili discovery。设为 `false` 后，B 站候选池占比会从运行时有效配比中剔除，已保存的 `scheduler.pool_source_shares.bilibili` 数值仍保留，重新开启后继续使用 |
-
-### `[sources.xiaohongshu]`
-
-小红书专用配置。内容发现和元数据提取都由浏览器扩展在真实登录态下完成：被动收集、后台标签页搜索和创作者订阅都会通过扩展任务桥回写后端。主后端不主动爬取小红书，也不再依赖 `sidecar_url`。
-
-| 键 | 类型 | 默认值 | 说明 |
-|----|------|--------|------|
-| `enabled` | bool | `true` | 是否启用小红书 discovery 和 init bootstrap；`init` 选 No、`--no-xhs` 或 `OPENBILICLAW_NO_XHS=1` 会写回 `false` |
-| `daily_search_budget` | int | `30` | 每天后端允许入队的 Soul 驱动搜索任务数上限。由 `XhsTaskProducer`（`runtime/xhs_producer.py`）在持续刷新循环里使用，搭配内部 4h 最小间隔避免反复抢配额 |
-| `daily_creator_budget` | int | `10` | 每天每位订阅创作者的抓取任务上限 |
-| `task_interval_seconds` | int | `45` | 扩展分发器两次任务之间的最小间隔（秒） |
-
-> **安全设计要点：** 后端从不直接调用小红书搜索 / Feed API。所有"主动发现"（关键词搜索、创作者主页浏览）都在用户自己的浏览器中以后台标签页形式执行，由扩展代理完成。被动发现则利用用户正常浏览时已经加载的卡片 URL，零额外请求。
-
-### `[sources.douyin]`
-
-抖音专用 discovery 配置。初始化画像仍由浏览器扩展执行；本段控制 `openbiliclaw discover --source douyin` / `discover-douyin` 的内容发现。Cookie 不写进 `config.toml`：`cookie_env` 指向的环境变量优先；未设置时，后端读取浏览器扩展通过 `/api/sources/dy/cookie` 同步到 `data/douyin_cookie.json` 的值。
-
-| 键 | 类型 | 默认值 | 说明 |
-|----|------|--------|------|
-| `enabled` | bool | `false` | 是否启用抖音 discovery。默认关闭，必须显式 opt-in |
-| `mode` | string | `"direct"` | 当前仅支持 `direct`，保留字段用于后续 extension/direct 切换 |
-| `cookie_env` | string | `"OPENBILICLAW_DOUYIN_COOKIE"` | douyin.com Cookie header 的环境变量覆盖名；为空时使用扩展同步文件 |
-| `daily_search_budget` | int | `30` | 每日搜索插件任务预算，限制 `dy_tasks(type="search")` 入队次数 |
-| `daily_hot_budget` | int | `5` | 每日热点插件任务预算，限制 `dy_tasks(type="hot")` 入队次数；runtime 抖音缺口较大时会把有效预算临时抬高到 `max(配置值, min(缺口, 60))`，手动 CLI 仍使用配置值 |
-| `daily_feed_budget` | int | `30` | 每日首页推荐流插件任务预算，限制 `dy_tasks(type="feed")` 入队次数 |
-| `request_interval_seconds` | int | `2` | direct 请求的建议最小间隔；当前插件签名链路主要由任务预算和 runtime producer 节流保护 |
-
-当前 `search` 子来源优先使用浏览器插件的 logged-in page + acrawler 签名桥，并以 `dy-plugin-search` 进入 discovery；`hot` 子来源优先使用插件 hot-related 链路，并以 `dy-plugin-hot-related` 进入 discovery；`feed` 子来源使用同一插件签名桥请求 `/aweme/v1/web/tab/feed/`，并以 `dy-plugin-feed` 进入 discovery。插件任务空 / 失败时 search / hot 会分别回退 direct-cookie search / hot，feed 也保留 direct-cookie 诊断 fallback；因 daemon 重启或插件未及时消费而被清理的 `failed/stale_pending` 任务不消耗每日预算。runtime 大缺口补池会优先 search / hot，feed 只用于小缺口补零散名额。`msToken` 如果存在会随 Cookie 一起使用，但扩展同步不再硬依赖它。若 Cookie 过期、签名被拒绝或插件未在线，命令可能返回 0 条并提示检查登录态。
 
 ### `[sources.youtube]`
 
@@ -331,18 +274,15 @@ YouTube discovery 配置。初始化画像由浏览器扩展读取观看历史 /
 
 ### `[scheduler.pool_source_shares]`
 
-候选池按平台族做保底配比，默认 `bilibili:xiaohongshu:douyin:youtube = 8:1:1:1`。关闭的平台会保留配置值但在运行时从有效配比中剔除，剩余平台重新归一化吃满 `pool_target_count`；默认安装里 YouTube / Douyin 关闭，所以不会因为默认 share 留空池子。
+候选池按平台族做保底配比。OpenYouTubeClaw 只有 YouTube 一个平台族。
 
 | 键 | 类型 | 默认值 | 说明 |
 |----|------|--------|------|
-| `bilibili` | int | `8` | B 站平台族占比；`search` / `related_chain` / `trending` / `explore` 四个策略统一计入该族 |
-| `xiaohongshu` | int | `1` | 小红书平台族占比；`xhs-extension-*` 原始来源统一计入该族 |
-| `douyin` | int | `1` | 抖音平台族占比；`dy-plugin-search` / `dy-plugin-hot-related` / `dy-plugin-feed` 等统一计入该族 |
 | `youtube` | int | `1` | YouTube 平台族占比；`yt_search` / `yt_trending` / `yt_channel` 统一计入该族 |
 
-运行时会把同一份目标传给 `reactivate_under_quota_pool_sources()`、`trim_pool_source_overflow()` 和 `trim_pool_to_target_count()`：小平台低于目标时，会优先保护 / 复活它们的候选；任一平台族高于目标时，会先压回配额内，避免它占用其他平台的保留容量；B 站低于目标且 `[sources.bilibili].enabled=true` 时，仍由四个 B 站 discovery 策略并行补货；抖音低于目标且 `[sources.douyin].enabled=true` 时，后台 `DouyinDiscoveryProducer` 会通过 `DouyinDiscoveryService(cache=True)` 触发 search / hot / feed 补池；YouTube 低于目标且 `[sources.youtube].enabled=true` 时，runtime 会调度 `yt_search` / `yt_trending` / `yt_channel` 补池。
+运行时会把同一份目标传给 `reactivate_under_quota_pool_sources()`、`trim_pool_source_overflow()` 和 `trim_pool_to_target_count()`。YouTube 低于目标且 `[sources.youtube].enabled=true` 时，runtime 会调度 `yt_search` / `yt_trending` / `yt_channel` 补池。
 
-`openbiliclaw init` 会根据用户是否接入小红书 / 抖音 / YouTube 写回对应 `enabled`；Bilibili 默认启用，也可在插件设置页或 `config.toml` 里手动关闭。交互式初始化在采集完各平台事件后，会按事件量给出一组推荐比例，用户可确认使用或手动输入。插件设置页也可开关四个平台、编辑四个平台占比，并通过 `/api/config/source-share-suggestion` 按已有事件重新生成建议值；GET 使用已保存配置，POST 可接收设置页当前尚未保存的 `enabled_sources` / `configured_shares`。
+插件设置页可通过 `/api/config/source-share-suggestion` 按已有事件重新生成建议配比；GET 使用已保存配置，POST 可接收设置页当前尚未保存的 `enabled_sources` / `configured_shares`。
 
 ### `[storage]`
 
@@ -382,11 +322,11 @@ YouTube discovery 配置。初始化画像由浏览器扩展读取观看历史 /
 
 - 基础：`language`、`data_dir`、`storage.db_path`
 - LLM：默认 provider、各 provider 的 key/model/base_url、DeepSeek `reasoning_effort`、OpenRouter headers、四个 per-module override
-- B 站与多源：`bilibili.browser.*`、`sources.bilibili.enabled`、`sources.browser.*`、`sources.xiaohongshu.*`、`sources.douyin.*`、`sources.youtube.*`
-- 调度：`scheduler.enabled`、`pause_on_extension_disconnect`、`extension_disconnect_grace_seconds`、`discovery_cron`、`pool_target_count`、`account_sync_interval_hours`、四个平台 `pool_source_shares`、猜测兴趣参数、自动更新参数；设置页可调用 `/api/config/source-share-suggestion` 按已有事件和当前表单开关填入建议比例
+- YouTube 与浏览器源：`sources.youtube.*`、`sources.browser.*`
+- 调度：`scheduler.enabled`、`pause_on_extension_disconnect`、`extension_disconnect_grace_seconds`、`discovery_cron`、`pool_target_count`、`account_sync_interval_hours`、`pool_source_shares.youtube`、猜测兴趣参数、自动更新参数；设置页可调用 `/api/config/source-share-suggestion` 按已有事件和当前表单开关填入建议比例
 - 日志：控制台 / 文件级别、完整日志路径（保存时拆回 `directory` / `filename`）、轮转与非托管日志清理参数
 
-保留但不单独暴露的字段主要是目前只有一个有效值的内部兼容项，例如 `[sources.douyin].mode = "direct"`；保存时插件会继续按当前支持值写回，不会删除其他高级字段。
+保存时插件会继续按当前支持值写回，不会删除其他高级字段。
 
 ## `/api/config` 保存与恢复语义
 
@@ -415,23 +355,12 @@ YouTube discovery 配置。初始化画像由浏览器扩展读取观看历史 /
 
 | 变量 | 说明 |
 |------|------|
-| `OPENBILICLAW_BILIBILI_COOKIE` | 集成测试用 B 站 Cookie |
 | `GOOGLE_API_KEY` | Gemini 官方推荐 API Key 环境变量，优先级高于 `GEMINI_API_KEY` |
 | `GEMINI_API_KEY` | Gemini 官方兼容环境变量，`default_provider=gemini` 时可替代 `llm.gemini.api_key` |
 | `OPENBILICLAW_PROXY_HOST` | Docker 运行时可选宿主机代理地址，默认 `host.docker.internal` |
 | `OPENBILICLAW_PROXY_PORT` | Docker 运行时可选宿主机代理端口，默认 `7897` |
 | `OPENBILICLAW_PROXY_TIMEOUT` | Docker 运行时代理探测超时（秒），默认 `1.0` |
-| `OPENBILICLAW_DOUYIN_COOKIE` | 抖音 direct-cookie discovery 的显式 Cookie 覆盖；未设置时读取扩展同步的 `data/douyin_cookie.json` |
-| `OPENBILICLAW_NO_XHS` | 设为 `1` 时永久跳过 `init` 的小红书接入，即使脚本传了 `--yes-xhs` |
-| `OPENBILICLAW_NO_DOUYIN` | 设为 `1` 时永久跳过 `init` 的抖音接入，即使脚本传了 `--yes-douyin` |
 | `OPENBILICLAW_NO_YOUTUBE` | 设为 `1` 时永久跳过 `init` 的 YouTube 接入，即使脚本传了 `--yes-youtube` |
-| `OPENBILICLAW_XHS_BOOTSTRAP_WAIT_SECONDS` | `init --yes-xhs` 收集小红书扩展任务结果的最大等待秒数，默认 `180`；`fetch-xhs --wait-seconds` 可覆盖单次 smoke 命令 |
-| `OPENBILICLAW_XHS_BOOTSTRAP_DEDUPE_HOURS` | 小红书 `bootstrap_profile` 近期任务复用窗口，默认 `6` 小时；设为 `0` 可关闭复用，`fetch-xhs --force` 可绕过单次复用 |
-| `OPENBILICLAW_XHS_BOOTSTRAP_SCROLL_ROUNDS` | `init --yes-xhs` 的小红书每个 scope 最大滚动轮数，默认 `15` |
-| `OPENBILICLAW_XHS_BOOTSTRAP_MAX_ITEMS` | `init --yes-xhs` 的小红书每个 scope 最多采集条目数，默认 `300` |
-| `OPENBILICLAW_DY_BOOTSTRAP_WAIT_SECONDS` | `init --yes-douyin` 收集抖音扩展任务结果的最大等待秒数，默认 `180`；`fetch-douyin --wait-seconds` 可覆盖单次 smoke 命令 |
-| `OPENBILICLAW_DY_BOOTSTRAP_SCROLL_ROUNDS` | `init --yes-douyin` 的抖音每个 scope 最大滚动轮数，默认 `15` |
-| `OPENBILICLAW_DY_BOOTSTRAP_MAX_ITEMS` | `init --yes-douyin` 的抖音每个 scope 最多采集条目数，默认 `300` |
 | `OPENBILICLAW_YT_BOOTSTRAP_WAIT_SECONDS` | `init --yes-youtube` 收集 YouTube 扩展任务结果的最大等待秒数，默认 `240`；`fetch-youtube --wait-seconds` 可覆盖单次 smoke 命令 |
 | `OPENBILICLAW_YT_BOOTSTRAP_SCROLL_ROUNDS` | `init --yes-youtube` 的 YouTube 每个 scope 最大滚动轮数，默认 `10` |
 | `OPENBILICLAW_YT_BOOTSTRAP_MAX_ITEMS` | `init --yes-youtube` 的 YouTube 每个 scope 最多采集条目数，默认 `300` |
@@ -470,22 +399,22 @@ default_provider = "openai"
 api_key = "sk-..."
 model = "gpt-5-nano"
 
-[bilibili]
-auth_method = "cookie"
-cookie = ""
+[sources.youtube]
+enabled = true
+
+[scheduler.pool_source_shares]
+youtube = 1
 ```
 
 建议：
 
-- Docker 模式下的首选入口是 `python3 scripts/agent_bootstrap.py --mode docker --interactive-confirm --wait-for-extension-cookie`；它会确认配置、同步到容器 `/app/runtime`，并自动运行 init
+- Docker 模式下的首选入口是 `python3 scripts/agent_bootstrap.py --mode docker --interactive-confirm`；它会确认配置、同步到容器 `/app/runtime`，并自动运行 init
 - `docker exec -it openbiliclaw-backend openbiliclaw init` 是高级手动 fallback，用于重复初始化或排查
-- 如果缺少 provider API Key 或 B 站 Cookie，bootstrap / init 会直接在终端里引导并写回 Docker volume
+- 如果缺少 provider API Key，bootstrap / init 会直接在终端里引导并写回 Docker volume
 - provider 和 API Key 会写入 `/app/runtime/config.toml`
-- B 站 cookie 会写入 `/app/runtime/data/bilibili_cookie.json`
-- 首轮 `init` 和后续 `discover` 可能持续几分钟，因为它们会真实访问 B 站和当前 LLM provider
-- 当前 discover 已启用保守受控并发；默认会并发处理少量 B 站请求和 LLM 评分，但不提供额外用户配置项
-- `init` 的首轮补货会按 `search + related_chain -> trending -> explore` 分阶段推进，并尽量把 fresh 候选池补到至少 `100` 条
-- 如不方便交互，可使用 `docker exec openbiliclaw-backend openbiliclaw auth login --cookie "..."`
+- 首轮 `init` 和后续 `discover` 可能持续几分钟，因为它们会真实调用当前 LLM provider 和 YouTube API
+- 当前 discover 已启用保守受控并发；默认会并发处理少量 YouTube 请求和 LLM 评分
+- `init` 的首轮补货会按 `yt_search -> yt_trending -> yt_channel` 分阶段推进，并尽量把 fresh 候选池补到至少 `100` 条
 
 补充：
 

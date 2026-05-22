@@ -35,31 +35,20 @@ _LLM_EVAL_MIN_WINDOW: int = 6
 
 @dataclass
 class DiscoveryConcurrencyController:
-    """Shared bounded concurrency for external discovery dependencies."""
+    """Shared bounded concurrency for discovery dependencies."""
 
-    bilibili_request_concurrency: int = 2
     # Cap on simultaneous discovery LLM calls. Sized so a typical init
     # discover (4 strategies × ~8 batches each = ~32 batches) fans out
-    # in a single wave rather than queueing behind the cap. Each batch
-    # is a max-thinking deepseek call (~60-100s); without enough
-    # concurrency we'd spend the full P4 budget waiting on the
-    # semaphore (observed 17 min wall on 40 batches at concurrency=8,
-    # of which only ~100s was actual LLM compute per batch).
-    # deepseek has no effective RPM cap at our request sizes, so the
-    # only practical limits are the local event loop overhead and the
-    # ``chat_active`` yield (which still works to give interactive
-    # dialogue priority).
+    # in a single wave rather than queueing behind the cap.
     llm_evaluation_concurrency: int = 32
     search_budget_total: int = 30
-    """Total bilibili search API calls allowed per discovery run.
+    """Total YouTube search API calls allowed per discovery run.
 
     The budget is split evenly among strategies that use search
-    (search, explore, related_chain) to prevent any single strategy
-    from exhausting the IP-level rate limit.
+    (search, explore, related_chain) to prevent rate-limit exhaustion.
     """
     _search_strategy_count: int = field(init=False, default=3, repr=False)
     _loop: asyncio.AbstractEventLoop | None = field(init=False, default=None, repr=False)
-    _bilibili_semaphore: asyncio.Semaphore | None = field(init=False, default=None, repr=False)
     _llm_semaphore: asyncio.Semaphore | None = field(init=False, default=None, repr=False)
 
     @property
@@ -73,15 +62,7 @@ class DiscoveryConcurrencyController:
         if self._loop is loop:
             return
         self._loop = loop
-        self._bilibili_semaphore = asyncio.Semaphore(max(1, self.bilibili_request_concurrency))
         self._llm_semaphore = asyncio.Semaphore(max(1, self.llm_evaluation_concurrency))
-
-    async def run_bilibili(self, awaitable: Awaitable[_T]) -> _T:
-        """Run one Bilibili-facing awaitable within the request limit."""
-        self._ensure_loop_bound()
-        assert self._bilibili_semaphore is not None
-        async with self._bilibili_semaphore:
-            return await awaitable
 
     chat_active: bool = False
     llm_throttle_seconds: float = 0.0
@@ -256,21 +237,18 @@ class DiscoveredContent:
     discovered_at: str = ""  # Cache timestamp for recency-aware ranking
     last_scored_at: str = ""  # Last relevance scoring timestamp
 
-    # ── Multi-source fields (Phase 0) ───────────────────────────────
-    content_id: str = ""  # Universal content ID; equals bvid for Bilibili content
+    content_id: str = ""  # Universal content ID (video ID / bvid)
     content_url: str = ""  # Direct clickable URL
-    source_platform: str = ""  # "bilibili" | "xiaohongshu" | "web" | ...
-    author_name: str = ""  # Universal author name; equals up_name for Bilibili
+    source_platform: str = "youtube"
+    author_name: str = ""  # Universal author / channel name
 
     def __post_init__(self) -> None:
         if not self.content_id and self.bvid:
             self.content_id = self.bvid
-        if not self.source_platform and self.bvid:
-            self.source_platform = "bilibili"
+        if not self.source_platform:
+            self.source_platform = "youtube"
         if not self.author_name and self.up_name:
             self.author_name = self.up_name
-        if not self.content_url and self.bvid:
-            self.content_url = f"https://www.bilibili.com/video/{self.bvid}"
 
     def to_cache_kwargs(self) -> dict[str, object]:
         """Build the kwargs dict for ``Database.cache_content()``.
@@ -297,7 +275,7 @@ class DiscoveredContent:
             "relevance_reason": self.relevance_reason,
             "candidate_tier": self.candidate_tier,
             "source": self.source_strategy,
-            "source_platform": self.source_platform or "bilibili",
+            "source_platform": self.source_platform or "youtube",
             "content_id": self.content_id or self.bvid,
             "content_url": self.content_url,
             "author_name": self.author_name or self.up_name,
@@ -809,7 +787,7 @@ class ContentDiscoveryEngine:
                 "source_strategy": content.source_strategy,
             },
             source_context=source_context or content.source_strategy,
-            source_platform=content.source_platform or "bilibili",
+            source_platform=content.source_platform or "youtube",
         )
         try:
             llm_call = self._llm_service.complete_structured_task(
@@ -1139,7 +1117,7 @@ class ContentDiscoveryEngine:
             profile_summary=profile_data,
             content_items=content_items,
             source_context=source_context or (batch[0].source_strategy if batch else ""),
-            source_platform=(batch[0].source_platform or "bilibili") if batch else "bilibili",
+            source_platform=(batch[0].source_platform or "youtube") if batch else "youtube",
             negative_examples=negative_examples,
         )
 
@@ -1353,7 +1331,7 @@ class ContentDiscoveryEngine:
 
     @staticmethod
     def _content_identity(item: DiscoveredContent) -> str:
-        platform = (item.source_platform or "bilibili").strip() or "bilibili"
+        platform = (item.source_platform or "youtube").strip() or "youtube"
         content_id = (item.content_id or item.bvid or item.content_url).strip()
         if content_id:
             return f"{platform}:{content_id}"
@@ -1525,7 +1503,7 @@ class ContentDiscoveryEngine:
             ups: Counter[str] = Counter((c.up_name or "").strip().lower() for c in items)
             del ups[""]
             unique_titles = len({c.title.strip() for c in items if c.title})
-            platforms: Counter[str] = Counter((c.source_platform or "bilibili") for c in items)
+            platforms: Counter[str] = Counter((c.source_platform or "youtube") for c in items)
             top_up = ups.most_common(1)[0] if ups else ("", 0)
             logger.info(
                 "Strategy '%s' found %d items.%s "
@@ -1624,7 +1602,7 @@ class ContentDiscoveryEngine:
                     last_scored_at=str(row.get("last_scored_at", "")),
                     content_id=str(row.get("content_id", "") or bvid),
                     content_url=str(row.get("content_url", "")),
-                    source_platform=str(row.get("source_platform", "") or "bilibili"),
+                    source_platform=str(row.get("source_platform", "") or "youtube"),
                 )
             )
             if len(candidates) >= limit:

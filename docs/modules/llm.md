@@ -22,7 +22,7 @@
 | 4.5 核心记忆加载 | ✅ | 统一 core memory 注入入口，覆盖 Soul 全链路 |
 | v0.3.75 Per-module LLM 路由生效 | ✅ | `LLMService` 按 caller bucket 路由 `[llm.soul/discovery/recommendation/evaluation]`，通过 `LLMRegistry.complete_provider()` 精确调用 chat-capable provider；provider 错误不 spill 到 default，拼错 provider INFO 一次后降级 |
 | v0.3.75 Provider per-call model | ✅ | OpenAI / Claude / Gemini / DeepSeek / Ollama / OpenRouter 的 `complete(..., model=...)` 支持单次模型覆盖，不修改 provider 实例默认 `_model` |
-| 体验优化：B站动态语气 | ✅ | 推荐、画像总结和聊天 prompt 统一接入 `ToneProfile`，在“老B友”基础上按用户画像微调语气 |
+| 体验优化：动态语气 | ✅ | 推荐、画像总结和聊天 prompt 统一接入 `ToneProfile`，按用户画像微调语气 |
 | v0.3.0 Ollama embedding 兜底 | ✅ | `OllamaProvider.embed()` 走原生 `/api/embeddings`，配合 `bge-m3` 模型可在 Mac/Win/Linux CPU 跑相似度计算，不需要额外的 embedding API Key |
 | v0.3.0 EmbeddingService 双层缓存 | ✅ | L1 内存 + L2 SQLite 持久化；`build_embedding_service` 按 provider 自动选默认 model（gemini→gemini-embedding-001 / openai→text-embedding-3-small / ollama→bge-m3） |
 | v0.3.20 Embedding 自动 fallback | ✅ | `LLMProvider.supports_embedding` 类属性显式声明 provider 是否真的有 embeddings endpoint。Claude / DeepSeek / OpenRouter 标 `False`（前者无 API、后两者继承自 OpenAIProvider 但实际后端不路由 embeddings）；OpenAI / Gemini / Ollama 标 `True`。`build_embedding_service` 据此跑 fallback 链（请求的 provider → ollama → gemini → openai），主 LLM 没有 embedding 能力时透明回退而不是返回 None |
@@ -191,7 +191,7 @@ tag 解析优先级,longest-prefix 命中:
 | `recommendation.write_expression` | 1 | popup 可见的池子表达式回填 |
 | `discovery.evaluate_batch` | 1 | 当前 discovery 批次评估 |
 | `recommendation.delight_score` | 2 | 后台批量打分 |
-| `soul.*` / `xhs.*` | 2 | 灵魂分析 / 小红书分类 |
+| `soul.*` | 2 | 灵魂分析 |
 | 其他 / 空 | 3 | 默认 |
 
 数字越小越先服务。无竞争时 free passthrough 不增加开销。维护者新增
@@ -206,7 +206,7 @@ priority≤2 任务。
 | caller 前缀 | module bucket |
 |---|---|
 | `soul.*` | `soul` |
-| `discovery.search/explore/trending/related.*`、`yt_search.*`、`sources.xhs.*` | `discovery` |
+| `discovery.search/explore/trending/related.*`、`yt_search.*` | `discovery` |
 | `recommendation.delight_score`、`recommendation.evaluate_batch`、`discovery.evaluate*`、`eval.*` | `evaluation` |
 | 其他 `recommendation.*` | `recommendation` |
 
@@ -280,7 +280,7 @@ x_title = "OpenBiliClaw"
 6. **OpenAI-compatible 复用**：DeepSeek、OpenRouter 这类兼容 OpenAI 协议的 provider 复用同一套重试、超时和错误归一化逻辑，只在子类中注入默认地址或额外请求头
 7. **Gemini 独立适配**：Gemini 走官方 `google-genai` SDK，不强行复用 OpenAI-compatible 抽象；provider 内部负责把统一 `messages` 渲染成 quickstart 风格的单文本 prompt
 8. **Gemini 可选依赖降级**：环境里缺少 `google-genai` 时，`llm` 包和 registry 仍可正常导入；只有真正实例化 Gemini provider 时才会给出明确缺依赖错误
-9. **Prompt 风格集中收口**：推荐、画像和聊天的“老B友”语气由共享 `ToneProfile` 驱动，不允许各模块各自发散成不同人格
+9. **Prompt 风格集中收口**：推荐、画像和聊天的个性化语气由共享 `ToneProfile` 驱动，不允许各模块各自发散成不同人格
 10. **Prompt-cache 约定**：高频结构化 builder 的 system prompt 必须保持静态；user prompt 按“画像 / 长期偏好 / 来源上下文 / 本批内容”从稳定到易变排序，并使用确定性 JSON，便于 DeepSeek / Claude / OpenAI / Gemini 的 provider-side prompt cache 复用前缀
 11. **结构化输出只在 helper 处放宽**：业务模块不再各自手写 JSON 截取逻辑；容错集中在 `json_utils.py`，模块侧用 predicate 收紧语义，避免一个 provider 的异常 shape 修复污染其他任务。
 12. **分模块 override 不隐式改意图**：`[llm.<module>]` 命中时必须精确调用用户指定的 chat provider；只有 provider 拼错或不是 chat-capable 时才降级到默认链并 INFO 一次。模型覆盖通过 per-call `model=` 完成，避免污染 provider 实例状态或影响其他模块。

@@ -10,18 +10,15 @@
  *   5. Repeats until all scopes are done, then sends a final status=ok.
  *   6. Closes the tab and releases the mutex.
  *
- * Unlike the Douyin dispatcher, no MAIN-world fetch-tap injection is needed —
- * YouTube data is read from the DOM directly by the content script.
- * Unlike Douyin's click-driven SPA navigation, each scope lives at its own
- * URL so chrome.tabs.update is safe and clean.
+ * YouTube data is read from the DOM directly by the content script; each scope
+ * lives at its own URL so chrome.tabs.update is safe and clean.
  */
 
 import type { YtBootstrapItem, YtScope, YtScopeResult } from "../content/yt/task-executor.js";
 import { YT_SCOPE_URLS } from "../content/yt/task-executor.js";
 import { apiUrl } from "../shared/backend-endpoint.ts";
 
-// Cross-source mutex — same field as xhs/dy dispatchers so all three
-// cooperate on a single long-running task slot.
+// Dispatcher mutex — ensures at most one long-running task tab is open at a time.
 const _MUTEX_STALE_MS = 6 * 60 * 1000;
 function tryAcquireDispatcherMutex(label: string): boolean {
   const g = globalThis as unknown as {

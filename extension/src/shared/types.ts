@@ -26,13 +26,12 @@ export interface ActionHint {
 /**
  * Platform-specific logic injected into the generic collector kernel.
  *
- * One adapter per site (bilibili, xiaohongshu, ...). The kernel handles
- * DOM observation, debouncing, and transport; adapters handle what
- * counts as a "card", how to extract a content id, and how to classify
- * pages/actions for that site.
+ * The kernel handles DOM observation, debouncing, and transport; adapters
+ * handle what counts as a "card", how to extract a content id, and how to
+ * classify pages/actions for that site.
  */
 export interface PlatformAdapter {
-  /** Identifier stored on every event, e.g. "bilibili" | "xiaohongshu". */
+  /** Identifier stored on every event, e.g. "youtube". */
   readonly sourcePlatform: string;
 
   /** Classify the current URL into a coarse page type for context. */
@@ -59,8 +58,7 @@ export interface PlatformAdapter {
 
   /**
    * CSS selector for the main video element (if any). When null the
-   * kernel skips video observation — xhs and most web sources don't
-   * have a single play/pause-able player worth tracking.
+   * kernel skips video observation.
    */
   readonly videoSelector: string | null;
 

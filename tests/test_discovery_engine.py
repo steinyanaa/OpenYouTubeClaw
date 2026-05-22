@@ -18,25 +18,39 @@ from openbiliclaw.discovery.engine import (
 )
 from openbiliclaw.discovery.pool_snapshot import PoolDistributionSnapshot
 from openbiliclaw.soul.profile import SoulProfile
+from openbiliclaw.soul.profile import SoulProfile as _SoulProfile
 from openbiliclaw.storage.database import Database
 
-from .test_explore_strategy import (
-    FakeBilibiliClient as FakeExploreBilibiliClient,
-)
-from .test_explore_strategy import (
-    FakeLLMService as FakeExploreLLMService,
-)
-from .test_related_chain_strategy import (
-    FakeLLMService as FakeRelatedLLMService,
-)
-from .test_related_chain_strategy import (
-    FakeMemoryManager,
-    FakeRelatedClient,
-    _event,
-)
-from .test_search_strategy import FakeBilibiliClient, FakeLLMService, _build_profile
-from .test_trending_strategy import FakeLLMService as FakeTrendingLLMService
-from .test_trending_strategy import FakeRankingClient
+
+def _build_profile() -> _SoulProfile:
+    return _SoulProfile()
+
+
+class FakeLLMService:
+    """Minimal LLM stub that returns a fixed JSON string and records calls."""
+
+    def __init__(self, response: str) -> None:
+        self._response = response
+        self.calls: list[dict] = []
+
+    async def complete_structured_task(
+        self,
+        *,
+        system_instruction: str,
+        user_input: str,
+        history: list[dict] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+        caller: str = "",
+        reasoning_effort: str | None = None,
+    ) -> object:
+        self.calls.append({"system_instruction": system_instruction, "user_input": user_input})
+
+        class _R:
+            def __init__(self, content: str) -> None:
+                self.content = content
+
+        return _R(self._response)
 
 
 @dataclass
@@ -83,52 +97,19 @@ async def _contend_llm_semaphore(
     )
 
 
-async def _contend_bilibili_semaphore(
-    controller: DiscoveryConcurrencyController,
-    *,
-    delay: float = 0.01,
-) -> None:
-    async def _job() -> str:
-        await asyncio.sleep(delay)
-        return "ok"
-
-    await asyncio.gather(
-        controller.run_bilibili(_job()),
-        controller.run_bilibili(_job()),
-    )
-
-
 def test_discovery_concurrency_controller_survives_multiple_event_loops() -> None:
     controller = DiscoveryConcurrencyController(
-        bilibili_request_concurrency=1,
         llm_evaluation_concurrency=1,
     )
 
     asyncio.run(_contend_llm_semaphore(controller))
-    asyncio.run(_contend_bilibili_semaphore(controller))
     asyncio.run(_contend_llm_semaphore(controller))
-    asyncio.run(_contend_bilibili_semaphore(controller))
 
 
+@pytest.mark.skip(reason="platform removed: bilibili SearchStrategy deleted")
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_registered_search_strategy() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
-
-    engine = ContentDiscoveryEngine()
-    strategy = SearchStrategy(
-        llm_service=FakeLLMService('{"queries": ["纪录片 原理"]}'),
-        bilibili_client=FakeBilibiliClient(
-            {"纪录片 原理": [{"bvid": "BV1A", "title": "纪录片", "author": "UP1", "mid": 1}]}
-        ),
-        llm_evaluation=False,
-    )
-    engine.register_strategy(strategy)
-
-    results = await engine.discover(_build_profile())
-
-    assert len(results) == 1
-    assert results[0].bvid == "BV1A"
-    assert results[0].source_strategy == "search"
+    pass
 
 
 @pytest.mark.asyncio
@@ -183,133 +164,28 @@ async def test_evaluate_content_passes_disliked_topics_to_prompt() -> None:
     assert "低质混剪" in user_input
 
 
+@pytest.mark.skip(reason="platform removed: bilibili SearchStrategy deleted")
 @pytest.mark.asyncio
 async def test_discovery_engine_handles_empty_strategy_results() -> None:
-    from openbiliclaw.discovery.strategies.strategies import SearchStrategy
-
-    engine = ContentDiscoveryEngine()
-    engine.register_strategy(
-        SearchStrategy(
-            llm_service=FakeLLMService('{"queries": []}'),
-            bilibili_client=FakeBilibiliClient({}),
-            llm_evaluation=False,
-        )
-    )
-
-    results = await engine.discover(SoulProfile())
-
-    assert results == []
+    pass
 
 
+@pytest.mark.skip(reason="platform removed: bilibili TrendingStrategy deleted")
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_registered_trending_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import TrendingStrategy
-
-    engine = ContentDiscoveryEngine(
-        llm_service=FakeTrendingLLMService(
-            [
-                '{"rids": [36]}',
-                '{"score": 0.83, "reason": "符合你的深度内容偏好。"}',
-            ]
-        )
-    )
-    engine.register_strategy(
-        TrendingStrategy(
-            bilibili_client=FakeRankingClient(
-                {
-                    0: [{"bvid": "BV1A", "title": "全站榜", "author": "UP1", "mid": 1}],
-                    36: [],
-                }
-            ),
-            llm_service=engine._llm_service,
-            score_threshold=0.65,
-        )
-    )
-
-    results = await engine.discover(_build_profile())
-
-    assert len(results) == 1
-    assert results[0].bvid == "BV1A"
-    assert results[0].source_strategy == "trending"
+    pass
 
 
+@pytest.mark.skip(reason="platform removed: bilibili RelatedChainStrategy deleted")
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_related_chain_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import RelatedChainStrategy
-
-    engine = ContentDiscoveryEngine(
-        llm_service=FakeRelatedLLMService(['{"score": 0.84, "reason": "延续了近期观看兴趣。"}'])
-    )
-    engine.register_strategy(
-        RelatedChainStrategy(
-            bilibili_client=FakeRelatedClient(
-                {
-                    "BV1SEED": [
-                        {
-                            "bvid": "BV1REL",
-                            "title": "相关推荐",
-                            "owner": {"name": "UPR", "mid": 10},
-                        }
-                    ]
-                }
-            ),
-            llm_service=engine._llm_service,
-            memory_manager=FakeMemoryManager(events=[_event("BV1SEED")]),
-        )
-    )
-
-    results = await engine.discover(_build_profile())
-
-    assert len(results) == 1
-    assert results[0].bvid == "BV1REL"
-    assert results[0].source_strategy == "related_chain"
+    pass
 
 
+@pytest.mark.skip(reason="platform removed: bilibili ExploreStrategy deleted")
 @pytest.mark.asyncio
 async def test_discovery_engine_runs_explore_strategy() -> None:
-    from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-    from openbiliclaw.discovery.strategies.strategies import ExploreStrategy
-
-    engine = ContentDiscoveryEngine(
-        llm_service=FakeExploreLLMService(
-            [
-                """
-                {
-                  "domains": [
-                    {
-                      "domain": "城市空间与建筑叙事",
-                      "why_it_might_resonate": "你偏好理解复杂系统。",
-                      "novelty_level": 0.7,
-                      "queries": ["城市 建筑 纪录片"]
-                    }
-                  ]
-                }
-                """,
-                '{"score": 0.84, "reason": "这个陌生主题仍然符合你的理解欲。"}',
-            ]
-        )
-    )
-    engine.register_strategy(
-        ExploreStrategy(
-            llm_service=engine._llm_service,
-            bilibili_client=FakeExploreBilibiliClient(
-                {
-                    "城市 建筑 纪录片": [
-                        {"bvid": "BV1EXP", "title": "城市建筑", "author": "UPX", "mid": 9}
-                    ]
-                }
-            ),
-            score_threshold=0.65,
-        )
-    )
-
-    results = await engine.discover(_build_profile())
-
-    assert len(results) == 1
-    assert results[0].bvid == "BV1EXP"
-    assert results[0].source_strategy == "explore"
+    pass
 
 
 class _RecordingStrategy:
@@ -1353,7 +1229,6 @@ async def test_discovery_engine_limits_llm_evaluation_concurrency() -> None:
     engine = ContentDiscoveryEngine(
         llm_service=llm_service,
         concurrency=DiscoveryConcurrencyController(
-            bilibili_request_concurrency=2,
             llm_evaluation_concurrency=2,
         ),
     )

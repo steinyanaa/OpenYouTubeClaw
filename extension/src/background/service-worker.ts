@@ -150,13 +150,10 @@ let runtimeConnectInFlight = false;
 function handleRuntimeEvent(event: Record<string, unknown>): void {
   const eventType = String(event.type ?? "");
 
-  // Task-kick events: the backend broadcasts these from
-  // /api/sources/{xhs,dy}/kick when the CLI enqueues a bootstrap
-  // task. Poking the dispatcher here cuts the worst-case
-  // enqueue→pickup latency from ~60s (alarm interval) to ~50ms,
-  // which is what makes init's 30s collect window reliable.
-  // The chrome.alarms 60s poll stays as fallback for the
-  // WS-down case.
+  // Task-kick events: the backend broadcasts this from /api/sources/yt/kick
+  // when the CLI enqueues a bootstrap task. Cuts worst-case enqueue→pickup
+  // latency from ~60s (alarm interval) to ~50ms. The chrome.alarms poll
+  // stays as fallback for the WS-down case.
   if (eventType === "yt_task_available") {
     pollYtTaskNow();
     return;

@@ -648,6 +648,7 @@ async def test_generate_recommendations_populates_expression_and_updates_history
         assert history[0]["presented"] == 0
 
 
+@pytest.mark.skip(reason="platform removed: bilibili '老B友' tone label no longer default")
 @pytest.mark.asyncio
 async def test_generate_expression_uses_old_friend_tone_prompt() -> None:
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -1246,7 +1247,7 @@ def test_build_debug_summary_counts_styles_sources_and_topics() -> None:
     assert summary["styles"] == {"deep_dive": 2, "news_brief": 1}
     assert summary["sources"] == {"search": 2, "trending": 1}
     assert summary["topics"] == {"国际时事:地缘政治": 2, "国际时事:贸易": 1}
-    assert summary["platforms"] == {"bilibili": 3}
+    assert summary["platforms"] == {"youtube": 3}
     assert summary["sample_titles"] == ["讲透中东局势", "贸易政策速读", "另外一条中东局势"]
 
 

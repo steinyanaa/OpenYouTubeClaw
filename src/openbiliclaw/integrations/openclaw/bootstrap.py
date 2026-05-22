@@ -3,21 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
-from openbiliclaw.bilibili.api import BilibiliAPIClient
-from openbiliclaw.bilibili.auth import resolve_runtime_cookie
 from openbiliclaw.config import Config, load_config
-from openbiliclaw.discovery.engine import ContentDiscoveryEngine
-from openbiliclaw.discovery.strategies.strategies import (
-    ExploreStrategy,
-    RelatedChainStrategy,
-    SearchStrategy,
-    TrendingStrategy,
+from openbiliclaw.discovery.engine import ContentDiscoveryEngine, DiscoveryConcurrencyController
+from openbiliclaw.discovery.strategies.youtube import (
+    YoutubeChannelStrategy,
+    YoutubeSearchStrategy,
+    YoutubeTrendingStrategy,
 )
 from openbiliclaw.llm import build_llm_registry
 from openbiliclaw.llm.service import LLMService, module_overrides_from_config
 from openbiliclaw.memory.manager import MemoryManager
+from openbiliclaw.recommendation.curator import PoolCurator
 from openbiliclaw.recommendation.engine import RecommendationEngine
 from openbiliclaw.runtime.account_sync import AccountSyncService
 from openbiliclaw.runtime.presence import PresenceTracker
@@ -25,6 +23,7 @@ from openbiliclaw.runtime.refresh import ContinuousRefreshController
 from openbiliclaw.runtime.source_policy import effective_pool_source_shares
 from openbiliclaw.soul.engine import SoulEngine
 from openbiliclaw.storage.database import Database
+from openbiliclaw.youtube.client import YtScraperClient
 
 from .operations import OpenClawAdapter
 
@@ -38,7 +37,6 @@ class OpenClawAdapterServices:
     memory_manager: MemoryManager | Any
     soul_engine: SoulEngine | Any
     llm_service: LLMService | Any
-    bilibili_client: BilibiliAPIClient | Any
     discovery_engine: ContentDiscoveryEngine | Any
     recommendation_engine: RecommendationEngine | Any
     runtime_controller: ContinuousRefreshController | Any
@@ -68,7 +66,6 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         module_overrides=module_overrides,
     )
     from openbiliclaw.llm.registry import build_embedding_service
-    from openbiliclaw.recommendation.curator import PoolCurator
 
     embedding_service = build_embedding_service(config, llm_registry)
 
@@ -79,65 +76,42 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         curator=curator,
         embedding_service=embedding_service,
     )
-    bilibili_client = BilibiliAPIClient(
-        cookie=resolve_runtime_cookie(
-            data_dir=config.data_path,
-            configured_cookie=config.bilibili.cookie,
-        )
-    )
 
-    from openbiliclaw.discovery.engine import DiscoveryConcurrencyController
-
+    yt_client = YtScraperClient()
     concurrency = DiscoveryConcurrencyController(
-        bilibili_request_concurrency=4,
         llm_evaluation_concurrency=4,
         search_budget_total=30,
     )
-
     discovery_engine = ContentDiscoveryEngine(
         llm_service=llm_service,
         database=database,
         embedding_service=embedding_service,
         concurrency=concurrency,
     )
-    search_strategy = SearchStrategy(
-        llm_service=llm_service,
-        bilibili_client=bilibili_client,
-        concurrency=concurrency,
+    discovery_engine.register_strategy(
+        YoutubeSearchStrategy(
+            client=yt_client,
+            llm_service=llm_service,
+            concurrency=concurrency,
+        )
     )
-    trending_strategy = TrendingStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        concurrency=concurrency,
+    discovery_engine.register_strategy(
+        YoutubeTrendingStrategy(
+            client=yt_client,
+            llm_service=llm_service,
+            concurrency=concurrency,
+        )
     )
-    related_strategy = RelatedChainStrategy(
-        bilibili_client=bilibili_client,
-        llm_service=llm_service,
-        memory_manager=cast("Any", memory_manager),
-        search_strategy=search_strategy,
-        trending_strategy=trending_strategy,
-        concurrency=concurrency,
+    discovery_engine.register_strategy(
+        YoutubeChannelStrategy(
+            client=yt_client,
+            llm_service=llm_service,
+            memory=memory_manager,
+            concurrency=concurrency,
+        )
     )
-    explore_strategy = ExploreStrategy(
-        llm_service=llm_service,
-        bilibili_client=bilibili_client,
-        concurrency=concurrency,
-        database=cast("Any", database),
-    )
-    discovery_engine.register_strategy(search_strategy)
-    discovery_engine.register_strategy(trending_strategy)
-    discovery_engine.register_strategy(related_strategy)
-    discovery_engine.register_strategy(explore_strategy)
-
-    from openbiliclaw.runtime.douyin_producer import build_douyin_discovery_producer
 
     presence = PresenceTracker()
-    douyin_producer = build_douyin_discovery_producer(
-        config=config,
-        database=database,
-        soul_engine=soul_engine,
-        discovery_engine=discovery_engine,
-    )
     runtime_controller = ContinuousRefreshController(
         memory_manager=memory_manager,
         database=database,
@@ -146,15 +120,11 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         recommendation_engine=recommendation_engine,
         pool_target_count=config.scheduler.pool_target_count,
         pool_source_shares=effective_pool_source_shares(config),
-        douyin_producer=douyin_producer,
         scheduler_config=config.scheduler,
         presence=presence,
     )
     account_sync_service = AccountSyncService(
         memory_manager=memory_manager,
-        bilibili_client=bilibili_client,
-        soul_engine=soul_engine,
-        sync_interval_hours=config.scheduler.account_sync_interval_hours,
     )
 
     return OpenClawAdapterServices(
@@ -163,7 +133,6 @@ def build_openclaw_adapter_services() -> OpenClawAdapterServices:
         memory_manager=memory_manager,
         soul_engine=soul_engine,
         llm_service=llm_service,
-        bilibili_client=bilibili_client,
         discovery_engine=discovery_engine,
         recommendation_engine=recommendation_engine,
         runtime_controller=runtime_controller,

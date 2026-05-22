@@ -338,7 +338,7 @@ def _build_registry() -> Any:
 
 def _build_auth_manager() -> Any:
     """Build the configured Bilibili auth manager."""
-    from openbiliclaw.bilibili.auth import AuthManager
+    from openbiliclaw.bilibili.auth import AuthManager  # type: ignore[import-untyped]
     from openbiliclaw.config import load_config
 
     return AuthManager(load_config().data_path)
@@ -347,7 +347,7 @@ def _build_auth_manager() -> Any:
 def _build_browser() -> Any:
     """Build the configured Bilibili browser integration."""
     from openbiliclaw.bilibili.auth import resolve_runtime_cookie
-    from openbiliclaw.bilibili.browser import BilibiliBrowser
+    from openbiliclaw.bilibili.browser import BilibiliBrowser  # type: ignore[import-untyped]
     from openbiliclaw.config import load_config
 
     config = load_config()
@@ -363,7 +363,7 @@ def _build_browser() -> Any:
 
 def _build_bilibili_client() -> Any:
     """Build the configured Bilibili API client."""
-    from openbiliclaw.bilibili.api import BilibiliAPIClient
+    from openbiliclaw.bilibili.api import BilibiliAPIClient  # type: ignore[import-untyped]
     from openbiliclaw.bilibili.auth import resolve_runtime_cookie
     from openbiliclaw.config import load_config
 
@@ -507,7 +507,6 @@ def _build_discovery_engine() -> Any:
         module_overrides=module_overrides_from_config(cfg),
     )
     concurrency = DiscoveryConcurrencyController(
-        bilibili_request_concurrency=1,
         llm_evaluation_concurrency=2,
     )
 
@@ -601,7 +600,7 @@ def _history_item_to_event(item: dict[str, Any]) -> dict[str, Any]:
     has the same shape as Xiaohongshu / future-source events, with a
     natural-language ``context`` the LLM analyzer can consume directly.
     """
-    from openbiliclaw.sources.event_format import SOURCE_BILIBILI, build_event
+    from openbiliclaw.sources.event_format import build_event
 
     history_meta = item.get("history", {})
     if not isinstance(history_meta, dict):
@@ -612,7 +611,7 @@ def _history_item_to_event(item: dict[str, Any]) -> dict[str, Any]:
     view_at = history_meta.get("view_at", item.get("view_at", ""))
     return build_event(
         event_type="view",
-        source_platform=SOURCE_BILIBILI,
+        source_platform="bilibili",
         title=title,
         url=f"https://www.bilibili.com/video/{bvid}" if bvid else "",
         author=author,
@@ -2050,7 +2049,7 @@ def _enqueue_xhs_bootstrap_task(*, force: bool = False) -> str | None:
     vars ``OPENBILICLAW_XHS_BOOTSTRAP_SCROLL_ROUNDS`` and
     ``OPENBILICLAW_XHS_BOOTSTRAP_MAX_ITEMS``.
     """
-    from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
+    from openbiliclaw.sources.xhs_tasks import XhsTaskQueue  # type: ignore[import-untyped]
 
     try:
         database = _get_runtime_database()
@@ -2248,7 +2247,7 @@ def _enqueue_dy_bootstrap_task() -> str | None:
     ``OPENBILICLAW_DY_BOOTSTRAP_SCROLL_ROUNDS`` and
     ``OPENBILICLAW_DY_BOOTSTRAP_MAX_ITEMS``.
     """
-    from openbiliclaw.sources.dy_tasks import DyTaskQueue
+    from openbiliclaw.sources.dy_tasks import DyTaskQueue  # type: ignore[import-untyped]
 
     try:
         database = _get_runtime_database()
@@ -2263,14 +2262,17 @@ def _enqueue_dy_bootstrap_task() -> str | None:
 
     try:
         queue = DyTaskQueue(database)
-        task_id = queue.enqueue_with_id(
-            "bootstrap_profile",
-            {
-                "scopes": ["dy_post", "dy_collect", "dy_like", "dy_follow"],
-                "max_items_per_scope": max(1, max_items),
-                "max_scroll_rounds": max(0, scroll_rounds),
-            },
-            daily_budget=10,
+        task_id = cast(
+            "str | None",
+            queue.enqueue_with_id(
+                "bootstrap_profile",
+                {
+                    "scopes": ["dy_post", "dy_collect", "dy_like", "dy_follow"],
+                    "max_items_per_scope": max(1, max_items),
+                    "max_scroll_rounds": max(0, scroll_rounds),
+                },
+                daily_budget=10,
+            ),
         )
     except Exception as exc:
         console.print(f"  [yellow]抖音初始化信号未导入: {exc}[/yellow]")
@@ -2531,13 +2533,16 @@ def _enqueue_dy_search_task(
 
     try:
         queue = DyTaskQueue(database)
-        task_id = queue.enqueue_with_id(
-            "search",
-            {
-                "keywords": normalized_keywords,
-                "max_items_per_keyword": max(1, int(max_items_per_keyword)),
-            },
-            daily_budget=20,
+        task_id = cast(
+            "str | None",
+            queue.enqueue_with_id(
+                "search",
+                {
+                    "keywords": normalized_keywords,
+                    "max_items_per_keyword": max(1, int(max_items_per_keyword)),
+                },
+                daily_budget=20,
+            ),
         )
     except Exception as exc:
         console.print(f"  [yellow]抖音搜索任务未入队: {exc}[/yellow]")
@@ -3925,7 +3930,7 @@ def init(
     # builder (v0.3.22+) so B站 / 小红书 / future-source events all carry
     # the same shape — including a natural-language ``context`` the
     # soul-pipeline LLM analyzers can read uniformly.
-    from openbiliclaw.sources.event_format import SOURCE_BILIBILI, build_event
+    from openbiliclaw.sources.event_format import build_event
 
     events = [_history_item_to_event(item) for item in history]
     for fav in favorites_data:
@@ -3934,7 +3939,7 @@ def init(
         events.append(
             build_event(
                 event_type="favorite",
-                source_platform=SOURCE_BILIBILI,
+                source_platform="bilibili",
                 title=str(fav.get("title", "")),
                 author=upper,
                 metadata={
@@ -3951,7 +3956,7 @@ def init(
         events.append(
             build_event(
                 event_type="follow",
-                source_platform=SOURCE_BILIBILI,
+                source_platform="bilibili",
                 title=name,
                 author=name,
                 # ``follow`` rendering benefits from showing the user's
@@ -4495,7 +4500,7 @@ def search_douyin(
     ),
 ) -> None:
     """通过浏览器插件执行抖音搜索 discovery smoke."""
-    from openbiliclaw.discovery.douyin import split_csv_values
+    from openbiliclaw.discovery.douyin import split_csv_values  # type: ignore[import-untyped]
 
     selected_keywords = split_csv_values(keywords)
     _print_page_title("抖音搜索发现", "浏览器插件任务 → dy_tasks 结果")
@@ -4970,7 +4975,7 @@ def _run_xhs_discovery(*, force: bool) -> None:
     """Trigger one Soul-driven xhs keyword production cycle."""
     from openbiliclaw.config import load_config
     from openbiliclaw.llm.service import LLMService, module_overrides_from_config
-    from openbiliclaw.runtime.xhs_producer import XhsTaskProducer
+    from openbiliclaw.runtime.xhs_producer import XhsTaskProducer  # type: ignore[import-untyped]
     from openbiliclaw.soul.engine import SoulProfileNotInitializedError
     from openbiliclaw.sources.xhs_tasks import XhsTaskQueue
 
@@ -5053,7 +5058,7 @@ def _run_xhs_discovery(*, force: bool) -> None:
 def _comma_separated_env_values(name: str) -> tuple[str, ...]:
     from openbiliclaw.discovery.douyin import split_csv_values
 
-    return split_csv_values([os.environ.get(name, "")])
+    return cast("tuple[str, ...]", split_csv_values([os.environ.get(name, "")]))
 
 
 def _normalize_douyin_discovery_sources(sources: tuple[str, ...]) -> tuple[str, ...]:
@@ -5084,7 +5089,7 @@ def _recent_douyin_creator_sec_uids(*, limit: int = 20) -> tuple[str, ...]:
     try:
         from openbiliclaw.sources.dy_tasks import recent_dy_creator_sec_uids
 
-        return recent_dy_creator_sec_uids(database, limit=limit)
+        return cast("tuple[str, ...]", recent_dy_creator_sec_uids(database, limit=limit))
     except Exception:
         return ()
 
@@ -5106,9 +5111,16 @@ def _run_douyin_discovery(
         DouyinDiscoveryService,
     )
     from openbiliclaw.soul.engine import SoulProfileNotInitializedError
-    from openbiliclaw.sources.douyin_auth import resolve_douyin_cookie
-    from openbiliclaw.sources.douyin_direct import DouyinDirectAuthError, DouyinDirectClient
-    from openbiliclaw.sources.douyin_plugin_search import DouyinPluginSearchClient
+    from openbiliclaw.sources.douyin_auth import (  # type: ignore[import-untyped]
+        resolve_douyin_cookie,
+    )
+    from openbiliclaw.sources.douyin_direct import (  # type: ignore[import-untyped]
+        DouyinDirectAuthError,
+        DouyinDirectClient,
+    )
+    from openbiliclaw.sources.douyin_plugin_search import (  # type: ignore[import-untyped]
+        DouyinPluginSearchClient,
+    )
 
     _require_runtime_config()
     config = config_module.load_config()

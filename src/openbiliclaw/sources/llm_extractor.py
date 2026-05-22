@@ -58,7 +58,7 @@ async def extract_content_from_page(
 
     Args:
         page_text: Raw visible text from a web page.
-        source_platform: Platform identifier (e.g. "xiaohongshu", "web").
+        source_platform: Platform identifier — always ``"youtube"``.
         llm_service: An LLM service with ``complete_structured_task()``.
         base_url: Base URL for resolving relative links.
 

@@ -67,36 +67,9 @@ model = ""
 provider = ""
 model = ""
 
-# Legacy Bilibili fields remain parseable for old configs but are not used by the YouTube-only runtime.
-[bilibili]
-auth_method = "none"
-cookie = ""
-
-[bilibili.browser]
-executable = ""
-headed = false
-
 [sources.browser]
 cdp_url = ""
 headed = false
-
-[sources.bilibili]
-enabled = false
-
-[sources.xiaohongshu]
-enabled = false
-daily_search_budget = 0
-daily_creator_budget = 0
-task_interval_seconds = 45
-
-[sources.douyin]
-enabled = false
-mode = "direct"
-cookie_env = "OPENBILICLAW_DOUYIN_COOKIE"
-daily_search_budget = 0
-daily_hot_budget = 0
-daily_feed_budget = 0
-request_interval_seconds = 2
 
 # The only active source in OpenYouTubeClaw.
 [sources.youtube]

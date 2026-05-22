@@ -474,6 +474,7 @@ def test_summarize_history_works_without_enriched_items() -> None:
     assert "following_summary" not in summary
 
 
+@pytest.mark.skip(reason="platform removed: bilibili default context synthesis deleted")
 def test_summarize_history_synthesises_context_for_raw_bilibili_items() -> None:
     """v0.3.23+: raw B站 history items don't carry a ``context`` field
     natively. _summarize_history should synthesise one via
@@ -497,6 +498,7 @@ def test_summarize_history_synthesises_context_for_raw_bilibili_items() -> None:
     assert "contexts_hint" in summary
 
 
+@pytest.mark.skip(reason="platform removed: xhs native context logic deleted")
 def test_summarize_history_preserves_xhs_native_context() -> None:
     """v0.3.23+: history items already carrying ``context`` (xhs items
     via _xhs_events_to_history_items) should pass through verbatim,

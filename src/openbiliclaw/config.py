@@ -140,6 +140,7 @@ def _gemini_api_key_from_env() -> str:
     return google_api_key or gemini_api_key
 
 
+# Legacy: kept for config file compatibility, not used at runtime.
 @dataclass
 class BilibiliConfig:
     """Bilibili connection configuration."""
@@ -180,6 +181,7 @@ class SchedulerConfig:
     auto_update_check_interval_hours: int = 6
 
 
+# Legacy: kept for config file compatibility, not used at runtime.
 @dataclass
 class XiaohongshuSourceConfig:
     """Xiaohongshu source-specific configuration.
@@ -203,6 +205,7 @@ class XiaohongshuSourceConfig:
     task_interval_seconds: int = 45
 
 
+# Legacy: kept for config file compatibility, not used at runtime.
 @dataclass
 class DouyinSourceConfig:
     """Douyin direct-cookie discovery configuration.
@@ -238,6 +241,7 @@ class YoutubeSourceConfig:
     request_interval_seconds: int = 2
 
 
+# Legacy: kept for config file compatibility, not used at runtime.
 @dataclass
 class BilibiliSourceConfig:
     """Bilibili discovery source switch."""
